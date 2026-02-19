@@ -22,6 +22,31 @@ class VisitRepo:
                ORDER BY c.fecha_consulta DESC"""
         ).fetchall()
 
+    def list_by_date_range(self, start_date: str, end_date: str) -> list[sqlite3.Row]:
+        """
+        start_date / end_date: 'YYYY-MM-DD'
+        Incluye ambos extremos.
+        """
+        s = (start_date or "").strip()
+        e = (end_date or "").strip()
+        if not s or not e:
+            # fallback: hoy
+            return self.list_today()
+
+        return self.conn.execute(
+            """SELECT c.cita_id, c.fecha_consulta, p.cedula,
+                    p.apellidos || ', ' || p.nombres AS paciente,
+                    c.motivo_consulta, c.forma_pago
+            FROM citas c
+            JOIN pacientes p ON p.paciente_id = c.paciente_id
+            WHERE date(c.fecha_consulta, 'localtime') BETWEEN date(?) AND date(?)
+            ORDER BY datetime(c.fecha_consulta) DESC
+            LIMIT 1000""",
+            (s, e),
+        ).fetchall()
+
+
+
     def list_for_patient(self, paciente_id: int) -> list[sqlite3.Row]:
         return self.conn.execute(
             """SELECT cita_id, fecha_consulta, motivo_consulta, diagnostico, plan, forma_pago
