@@ -26,6 +26,7 @@ class ClinicConfig:
     study_statuses: list[str]
     cytologies: list[str]
     biopsies: list[str]
+    histology_centers: list[str]
     limits: ClinicLimits
 
 
@@ -72,6 +73,7 @@ def load_config(path: str | Path = "config/config.yaml") -> Settings:
         study_statuses=list(clinic_raw.get("study_statuses", [])),
         cytologies=list(clinic_raw.get("cytologies", [])),
         biopsies=list(clinic_raw.get("biopsies", [])),
+        histology_centers=list(clinic_raw.get("histology_centers", [])),
         limits=limits,
     )
 

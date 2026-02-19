@@ -9,7 +9,7 @@ storage:
 
 clinic:
   payment_methods: ["efectivo", "transferencia", "pago movil", "otro"]
-  study_statuses: ["enviado", "pagado", "recibido", "entregado"]
+  study_statuses: ["ordenado", "enviado", "pagado", "recibido", "entregado"]
   cytologies: ["PAP", "MD", "MI"]
   biopsies:
     - "Cuello uterino"
@@ -23,6 +23,10 @@ clinic:
   limits:
     max_cytologies_per_visit: 3
     max_biopsies_per_visit: 1
+  
+  histology_centers:
+    - Centro Histológico Principal
+    - Centro Histológico Alterno
 
 dashboard:
   overdue_days: 30

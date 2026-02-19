@@ -1,28 +1,32 @@
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
+*.so
 *.egg-info/
 dist/
 build/
-.coverage
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
+.coverage
+htmlcov/
 
-# Venv
+# Virtual env
 .venv/
+venv/
 
-# App data
+# VSCode
+.vscode/
+
+# SQLite / data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
 data/
 backups/
+*.log
 
 # OS
 .DS_Store
 Thumbs.db
-
-# VSCode
-.vscode/*
-!.vscode/extensions.json
-!.vscode/settings.json

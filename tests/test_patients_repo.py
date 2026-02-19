@@ -40,3 +40,17 @@ def test_invalid_cedula(conn: sqlite3.Connection):
     repo = PatientRepo(conn)
     with pytest.raises(DomainError):
         repo.create(PatientUpsert(None, "12A", "Ana", "Perez"))
+
+
+def test_delete_blocked_if_has_visits(conn):
+    pr = PatientRepo(conn)
+    paciente_id = pr.create(PatientUpsert(None, "12345678", "Ana", "Perez"))
+
+    from consultorio.repos.visits import VisitCrud, VisitCreate
+
+    VisitCrud(conn).create(
+        VisitCreate(paciente_id=paciente_id, motivo_consulta="x", forma_pago="efectivo")
+    )
+
+    with pytest.raises(DomainError):
+        pr.delete(paciente_id)

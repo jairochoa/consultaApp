@@ -7,13 +7,17 @@ from tkinter import ttk
 from consultorio.config import Settings
 from consultorio.repos.visits import VisitRepo
 from consultorio.services.reporting import counts_pending_by_status, overdue_studies
+from consultorio.ui.events import EventBus
 
 
 class TodayView(ttk.Frame):
-    def __init__(self, master: tk.Misc, cfg: Settings, conn: sqlite3.Connection):
+    def __init__(self, master: tk.Misc, cfg: Settings, conn: sqlite3.Connection, *, bus: EventBus):
         super().__init__(master)
         self.cfg = cfg
         self.conn = conn
+        self.bus = bus
+        self.bus.subscribe("visits", self.refresh)
+        self.bus.subscribe("studies", self.refresh)
         self.repo = VisitRepo(conn)
         self._build()
 
@@ -66,13 +70,16 @@ class TodayView(ttk.Frame):
         enviado = counts.get("enviado", 0)
         pagado = counts.get("pagado", 0)
         recibido = counts.get("recibido", 0)
-        self.lbl.config(text=f"Pendientes | Enviado: {enviado}  Pagado: {pagado}  Recibido: {recibido}")
+        self.lbl.config(
+            text=f"Pendientes | Enviado: {enviado}  Pagado: {pagado}  Recibido: {recibido}"
+        )
 
         for i in self.tree.get_children():
             self.tree.delete(i)
         for r in self.repo.list_today():
             self.tree.insert(
-                "", "end",
+                "",
+                "end",
                 values=(
                     r["fecha_consulta"],
                     r["cedula"],
@@ -87,6 +94,14 @@ class TodayView(ttk.Frame):
         days = int(self.cfg.dashboard.overdue_days)
         for r in overdue_studies(self.conn, days=days):
             self.tree2.insert(
-                "", "end",
-                values=(r["fecha_enviado"], r["cedula"], r["paciente"], r["tipo"], r["subtipo"], r["estado"]),
+                "",
+                "end",
+                values=(
+                    r["fecha_enviado"],
+                    r["cedula"],
+                    r["paciente"],
+                    r["tipo"],
+                    r["subtipo"],
+                    r["estado"],
+                ),
             )

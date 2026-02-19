@@ -4,6 +4,7 @@ import sqlite3
 
 
 _SCHEMA: list[str] = [
+    # Pacientes
     """CREATE TABLE IF NOT EXISTS pacientes (
         paciente_id INTEGER PRIMARY KEY AUTOINCREMENT,
         cedula TEXT NOT NULL UNIQUE,
@@ -18,6 +19,7 @@ _SCHEMA: list[str] = [
         actualizado_en TEXT
     );""",
     """CREATE INDEX IF NOT EXISTS idx_pacientes_nombre ON pacientes(apellidos, nombres);""",
+    # Citas
     """CREATE TABLE IF NOT EXISTS citas (
         cita_id INTEGER PRIMARY KEY AUTOINCREMENT,
         paciente_id INTEGER NOT NULL,
@@ -43,36 +45,59 @@ _SCHEMA: list[str] = [
         FOREIGN KEY (paciente_id) REFERENCES pacientes(paciente_id) ON DELETE RESTRICT
     );""",
     """CREATE INDEX IF NOT EXISTS idx_citas_fecha ON citas(fecha_consulta);""",
+    # Centros histológicos (para el módulo administrativo)
     """CREATE TABLE IF NOT EXISTS centros_histologicos (
         centro_id INTEGER PRIMARY KEY AUTOINCREMENT,
         nombre TEXT NOT NULL UNIQUE,
         contacto TEXT
     );""",
+    # Estudios: se crean al ordenar en la cita (SIN centro aún).
     """CREATE TABLE IF NOT EXISTS estudios (
         estudio_id INTEGER PRIMARY KEY AUTOINCREMENT,
         cita_id INTEGER NOT NULL,
         paciente_id INTEGER NOT NULL,
-        centro_id INTEGER,
-        tipo TEXT NOT NULL,
-        subtipo TEXT NOT NULL,
-        estado TEXT NOT NULL,
-        fecha_enviado TEXT,
-        fecha_pagado TEXT,
-        fecha_recibido TEXT,
-        fecha_entregado TEXT,
-        resultado TEXT,
-        resultado_editado_en TEXT,
+
+        centro_id INTEGER,                 -- se asigna luego (administración)
+        tipo TEXT NOT NULL,                -- "citologia" | "biopsia"
+        subtipo TEXT NOT NULL,             -- PAP/MD/MI o tipo biopsia
+
+        estado_actual TEXT NOT NULL DEFAULT 'ordenado',  -- ordenado/enviado/pagado/recibido/entregado
+        ordenado_en TEXT NOT NULL DEFAULT (datetime('now')),
+        enviado_en TEXT,
+        pagado_en TEXT,
+        recibido_en TEXT,
+        entregado_en TEXT,
+
+        resultado TEXT,                    -- <= 300 chars
         creado_en TEXT NOT NULL DEFAULT (datetime('now')),
-        actualizado_en TEXT,
+        actualizado_en TEXT NOT NULL DEFAULT (datetime('now')),
+
         FOREIGN KEY (cita_id) REFERENCES citas(cita_id) ON DELETE CASCADE,
         FOREIGN KEY (paciente_id) REFERENCES pacientes(paciente_id) ON DELETE RESTRICT,
         FOREIGN KEY (centro_id) REFERENCES centros_histologicos(centro_id) ON DELETE SET NULL
     );""",
-    """CREATE INDEX IF NOT EXISTS idx_estudios_estado ON estudios(estado);""",
+    """CREATE INDEX IF NOT EXISTS idx_estudios_estado_actual ON estudios(estado_actual);""",
+    """CREATE INDEX IF NOT EXISTS idx_estudios_paciente ON estudios(paciente_id);""",
+    """CREATE INDEX IF NOT EXISTS idx_estudios_cita ON estudios(cita_id);""",
 ]
 
 
+def _colnames(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    # table_info: (cid, name, type, notnull, dflt_value, pk)
+    return {r[1] for r in rows}
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, col: str, col_def: str) -> None:
+    cols = _colnames(conn, table)
+    if col not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col_def}")
+
+
 def migrate(conn: sqlite3.Connection) -> None:
+    # Recomendado en SQLite para que respeten FKs (si tu connect() no lo hace ya)
+    conn.execute("PRAGMA foreign_keys = ON;")
+
     for stmt in _SCHEMA:
         conn.execute(stmt)
     conn.commit()

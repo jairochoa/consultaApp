@@ -112,3 +112,15 @@ class PatientRepo:
             ),
         )
         self.conn.commit()
+
+    def delete(self, paciente_id: int) -> None:
+        # No permitir borrar si tiene citas
+        cnt = self.conn.execute(
+            "SELECT COUNT(1) AS n FROM citas WHERE paciente_id=?",
+            (paciente_id,),
+        ).fetchone()
+        if cnt and int(cnt["n"]) > 0:
+            raise DomainError("No se puede eliminar: el paciente tiene citas registradas.")
+
+        self.conn.execute("DELETE FROM pacientes WHERE paciente_id=?", (paciente_id,))
+        self.conn.commit()

@@ -2,22 +2,30 @@ from __future__ import annotations
 
 import sqlite3
 import tkinter as tk
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
 from consultorio.domain.rules import DomainError
 from consultorio.repos.patients import PatientRepo, PatientUpsert
 from consultorio.repos.visits import VisitRepo
+from consultorio.ui.events import EventBus
 from consultorio.ui.widgets.common import error, info, warn
 from consultorio.ui.windows.new_visit import NewVisitWindow
 
 
 class PatientsView(ttk.Frame):
-    def __init__(self, master: tk.Misc, conn: sqlite3.Connection):
+    def __init__(self, master: tk.Misc, conn: sqlite3.Connection, *, bus: EventBus):
         super().__init__(master)
         self.conn = conn
+        self.bus = bus
         self.repo = PatientRepo(conn)
         self.visits = VisitRepo(conn)
         self.selected_id: int | None = None
+
+        # Auto-refresh sin botón:
+        self.bus.subscribe("patients", self.refresh)
+        # Si se crea una cita desde otra ventana, refrescamos historial del paciente seleccionado
+        self.bus.subscribe("visits", self._refresh_selected_patient_history)
+
         self._build()
         self.refresh()
 
@@ -31,7 +39,9 @@ class PatientsView(ttk.Frame):
         ttk.Button(top, text="Buscar", command=self.refresh).pack(side=tk.LEFT, padx=6)
 
         ttk.Button(top, text="Nuevo", command=self.new_patient).pack(side=tk.RIGHT)
-        self.btn_new_visit = ttk.Button(top, text="Nueva cita", command=self.open_new_visit, state=tk.DISABLED)
+        self.btn_new_visit = ttk.Button(
+            top, text="Nueva cita", command=self.open_new_visit, state=tk.DISABLED
+        )
         self.btn_new_visit.pack(side=tk.RIGHT, padx=8)
 
         body = ttk.Frame(self)
@@ -90,12 +100,22 @@ class PatientsView(ttk.Frame):
         btns.pack(fill=tk.X, padx=10, pady=10)
         ttk.Button(btns, text="Guardar", command=self.save).pack(side=tk.LEFT)
         ttk.Button(btns, text="Limpiar", command=self.new_patient).pack(side=tk.LEFT, padx=8)
+        self.btn_delete = ttk.Button(
+            btns, text="Eliminar", command=self.delete_patient, state=tk.DISABLED
+        )
+        self.btn_delete.pack(side=tk.LEFT, padx=8)
+
+    def _refresh_selected_patient_history(self) -> None:
+        if self.selected_id is not None:
+            self._load_hist(self.selected_id)
 
     def _row_entry(self, master: tk.Misc, label: str, var: tk.StringVar, width: int = 26) -> None:
         row = ttk.Frame(master)
         row.pack(fill=tk.X, padx=10, pady=6)
         ttk.Label(row, text=label).pack(side=tk.LEFT)
-        ttk.Entry(row, textvariable=var, width=width).pack(side=tk.LEFT, padx=6, fill=tk.X, expand=True)
+        ttk.Entry(row, textvariable=var, width=width).pack(
+            side=tk.LEFT, padx=6, fill=tk.X, expand=True
+        )
 
     def _row_text(self, master: tk.Misc, label: str, height: int = 3) -> tk.Text:
         ttk.Label(master, text=label).pack(anchor="w", padx=10)
@@ -104,8 +124,12 @@ class PatientsView(ttk.Frame):
         return t
 
     def refresh(self) -> None:
+        # guarda selección para restaurar
+        prev = self.selected_id
+
         for i in self.tree.get_children():
             self.tree.delete(i)
+
         for r in self.repo.search(self.q.get()):
             self.tree.insert(
                 "",
@@ -113,6 +137,14 @@ class PatientsView(ttk.Frame):
                 iid=str(r["paciente_id"]),
                 values=(r["cedula"], r["apellidos"], r["nombres"], r["telefono"] or ""),
             )
+
+        # restaurar selección si todavía existe
+        if prev is not None and self.tree.exists(str(prev)):
+            self.tree.selection_set(str(prev))
+            self.tree.see(str(prev))
+            # no llamo on_select para no reescribir lo que el médico está editando,
+            # pero sí refresco historial
+            self._load_hist(prev)
 
     def _clear_hist(self) -> None:
         for i in self.tree_hist.get_children():
@@ -138,10 +170,13 @@ class PatientsView(ttk.Frame):
             t.delete("1.0", tk.END)
         self.tree.selection_remove(self.tree.selection())
         self.btn_new_visit.config(state=tk.DISABLED)
+        self.btn_delete.config(state=tk.DISABLED)
         self._clear_hist()
 
     def on_select(self, _evt: object = None) -> None:
         sel = self.tree.selection()
+        self.btn_delete.config(state=tk.NORMAL if sel else tk.DISABLED)
+
         if not sel:
             return
         try:
@@ -192,6 +227,7 @@ class PatientsView(ttk.Frame):
                 self.selected_id = self.repo.create(p)
                 info("Paciente creado.")
             self.refresh()
+            self.bus.publish("patients")
         except DomainError as e:
             warn(str(e))
         except sqlite3.IntegrityError:
@@ -203,6 +239,32 @@ class PatientsView(ttk.Frame):
         if self.selected_id is None:
             warn("Selecciona un paciente primero.")
             return
-        win = NewVisitWindow(self, self.conn, paciente_id=self.selected_id)
+
+        win = NewVisitWindow(self, self.conn, paciente_id=self.selected_id, bus=self.bus)
         self.wait_window(win)
+
+        # El bus ya publica "visits" y "studies". Esto es redundante pero útil por si algo falla.
         self._load_hist(self.selected_id)
+
+    def delete_patient(self) -> None:
+        if self.selected_id is None:
+            warn("Selecciona un paciente primero.")
+            return
+
+        if not messagebox.askyesno(
+            "Confirmar eliminación",
+            "¿Eliminar este paciente? Esta acción no se puede deshacer.",
+        ):
+            return
+
+        try:
+            self.repo.delete(self.selected_id)
+            info("Paciente eliminado.")
+            self.new_patient()
+            self.refresh()
+            self.bus.publish("patients")
+
+        except DomainError as e:
+            warn(str(e))
+        except Exception as e:
+            error(str(e))
