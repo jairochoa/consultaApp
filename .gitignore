@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Venv
+.venv/
+
+# App data
+data/
+backups/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VSCode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json

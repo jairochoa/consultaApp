@@ -1,0 +1,28 @@
+app:
+  title: "Consultorio - Offline"
+  locale: "es_VE"
+
+storage:
+  db_path: "./data/consultorio.db"
+  backups_dir: "./backups"
+  wal_mode: true
+
+clinic:
+  payment_methods: ["efectivo", "transferencia", "pago movil", "otro"]
+  study_statuses: ["enviado", "pagado", "recibido", "entregado"]
+  cytologies: ["PAP", "MD", "MI"]
+  biopsies:
+    - "Cuello uterino"
+    - "Asa LEEP"
+    - "Endometrio"
+    - "Pólipo cervical"
+    - "Vaginal"
+    - "Vulvar"
+    - "Cono"
+    - "Otro"
+  limits:
+    max_cytologies_per_visit: 3
+    max_biopsies_per_visit: 1
+
+dashboard:
+  overdue_days: 30
