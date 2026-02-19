@@ -7,8 +7,8 @@ import pytest
 
 from consultorio.db.connection import connect
 from consultorio.db.schema import migrate
-from consultorio.repos.patients import PatientRepo, PatientUpsert
 from consultorio.domain.rules import DomainError
+from consultorio.repos.patients import PatientRepo, PatientUpsert
 
 
 @pytest.fixture

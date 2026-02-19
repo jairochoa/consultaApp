@@ -22,8 +22,6 @@ def run_main_window(cfg: Settings, conn: sqlite3.Connection) -> None:
 
     nb.add(today, text="Citas de hoy")
     nb.add(patients, text="Pacientes")
-
-    # Tab inicial
     nb.select(today)
 
     root.mainloop()

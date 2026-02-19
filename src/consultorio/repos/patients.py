@@ -32,18 +32,22 @@ class PatientRepo:
         q = (q or "").strip()
         if not q:
             return self.conn.execute(
-                """SELECT paciente_id, cedula, apellidos, nombres, telefono
-                   FROM pacientes
-                   ORDER BY apellidos, nombres
-                   LIMIT 200"""
+                """
+                SELECT paciente_id, cedula, apellidos, nombres, telefono
+                FROM pacientes
+                ORDER BY apellidos, nombres
+                LIMIT 200
+                """
             ).fetchall()
         like = f"%{q}%"
         return self.conn.execute(
-            """SELECT paciente_id, cedula, apellidos, nombres, telefono
-               FROM pacientes
-               WHERE cedula LIKE ? OR apellidos LIKE ? OR nombres LIKE ?
-               ORDER BY apellidos, nombres
-               LIMIT 200""",
+            """
+            SELECT paciente_id, cedula, apellidos, nombres, telefono
+            FROM pacientes
+            WHERE cedula LIKE ? OR apellidos LIKE ? OR nombres LIKE ?
+            ORDER BY apellidos, nombres
+            LIMIT 200
+            """,
             (like, like, like),
         ).fetchall()
 
@@ -57,11 +61,14 @@ class PatientRepo:
         validate_cedula(p.cedula)
         if not p.nombres.strip() or not p.apellidos.strip():
             raise DomainError("Nombres y apellidos son requeridos.")
+
         cur = self.conn.execute(
-            """INSERT INTO pacientes
-               (cedula, nombres, apellidos, telefono, fecha_nacimiento, domicilio,
-                antecedentes_personales, antecedentes_familiares, actualizado_en)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            """
+            INSERT INTO pacientes
+            (cedula, nombres, apellidos, telefono, fecha_nacimiento, domicilio,
+             antecedentes_personales, antecedentes_familiares, actualizado_en)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
             (
                 p.cedula.strip(),
                 p.nombres.strip(),
@@ -83,11 +90,14 @@ class PatientRepo:
         validate_cedula(p.cedula)
         if not p.nombres.strip() or not p.apellidos.strip():
             raise DomainError("Nombres y apellidos son requeridos.")
+
         self.conn.execute(
-            """UPDATE pacientes SET
-               cedula=?, nombres=?, apellidos=?, telefono=?, fecha_nacimiento=?, domicilio=?,
-               antecedentes_personales=?, antecedentes_familiares=?, actualizado_en=?
-               WHERE paciente_id=?""",
+            """
+            UPDATE pacientes SET
+              cedula=?, nombres=?, apellidos=?, telefono=?, fecha_nacimiento=?, domicilio=?,
+              antecedentes_personales=?, antecedentes_familiares=?, actualizado_en=?
+            WHERE paciente_id=?
+            """,
             (
                 p.cedula.strip(),
                 p.nombres.strip(),

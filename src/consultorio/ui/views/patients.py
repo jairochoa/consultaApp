@@ -4,9 +4,11 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk
 
-from consultorio.repos.patients import PatientRepo, PatientUpsert
 from consultorio.domain.rules import DomainError
+from consultorio.repos.patients import PatientRepo, PatientUpsert
+from consultorio.repos.visits import VisitRepo
 from consultorio.ui.widgets.common import error, info, warn
+from consultorio.ui.windows.new_visit import NewVisitWindow
 
 
 class PatientsView(ttk.Frame):
@@ -14,6 +16,7 @@ class PatientsView(ttk.Frame):
         super().__init__(master)
         self.conn = conn
         self.repo = PatientRepo(conn)
+        self.visits = VisitRepo(conn)
         self.selected_id: int | None = None
         self._build()
         self.refresh()
@@ -26,7 +29,10 @@ class PatientsView(ttk.Frame):
         self.q = tk.StringVar()
         ttk.Entry(top, textvariable=self.q, width=34).pack(side=tk.LEFT, padx=6)
         ttk.Button(top, text="Buscar", command=self.refresh).pack(side=tk.LEFT, padx=6)
+
         ttk.Button(top, text="Nuevo", command=self.new_patient).pack(side=tk.RIGHT)
+        self.btn_new_visit = ttk.Button(top, text="Nueva cita", command=self.open_new_visit, state=tk.DISABLED)
+        self.btn_new_visit.pack(side=tk.RIGHT, padx=8)
 
         body = ttk.Frame(self)
         body.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
@@ -35,7 +41,7 @@ class PatientsView(ttk.Frame):
         left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         cols = ("cedula", "apellidos", "nombres", "telefono")
-        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=20)
+        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=18)
         for c, t, w in [
             ("cedula", "Cédula", 120),
             ("apellidos", "Apellidos", 200),
@@ -47,10 +53,23 @@ class PatientsView(ttk.Frame):
         self.tree.bind("<<TreeviewSelect>>", self.on_select)
         self.tree.pack(fill=tk.BOTH, expand=True)
 
+        hist = ttk.LabelFrame(left, text="Historial de citas (paciente seleccionado)")
+        hist.pack(fill=tk.BOTH, expand=False, pady=(10, 0))
+
+        cols_h = ("fecha", "motivo", "pago")
+        self.tree_hist = ttk.Treeview(hist, columns=cols_h, show="headings", height=6)
+        for c, t, w in [
+            ("fecha", "Fecha", 170),
+            ("motivo", "Motivo", 520),
+            ("pago", "Pago", 120),
+        ]:
+            self.tree_hist.heading(c, text=t)
+            self.tree_hist.column(c, width=w, anchor="w")
+        self.tree_hist.pack(fill=tk.BOTH, expand=True)
+
         right = ttk.LabelFrame(body, text="Detalle / Edición")
         right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(12, 0))
 
-        # Campos básicos
         self.cedula = tk.StringVar()
         self.apellidos = tk.StringVar()
         self.nombres = tk.StringVar()
@@ -63,7 +82,6 @@ class PatientsView(ttk.Frame):
         self._row_entry(right, "Teléfono:", self.telefono)
         self._row_entry(right, "F. Nac (YYYY-MM-DD):", self.fnac, width=18)
 
-        # Campos texto
         self.domicilio = self._row_text(right, "Domicilio:", height=3)
         self.ant_p = self._row_text(right, "Antecedentes personales:", height=3)
         self.ant_f = self._row_text(right, "Antecedentes familiares:", height=3)
@@ -90,8 +108,23 @@ class PatientsView(ttk.Frame):
             self.tree.delete(i)
         for r in self.repo.search(self.q.get()):
             self.tree.insert(
-                "", "end", iid=str(r["paciente_id"]),
+                "",
+                "end",
+                iid=str(r["paciente_id"]),
                 values=(r["cedula"], r["apellidos"], r["nombres"], r["telefono"] or ""),
+            )
+
+    def _clear_hist(self) -> None:
+        for i in self.tree_hist.get_children():
+            self.tree_hist.delete(i)
+
+    def _load_hist(self, paciente_id: int) -> None:
+        self._clear_hist()
+        for r in self.visits.list_for_patient(paciente_id):
+            self.tree_hist.insert(
+                "",
+                "end",
+                values=(r["fecha_consulta"], (r["motivo_consulta"] or "")[:120], r["forma_pago"]),
             )
 
     def new_patient(self) -> None:
@@ -104,15 +137,24 @@ class PatientsView(ttk.Frame):
         for t in (self.domicilio, self.ant_p, self.ant_f):
             t.delete("1.0", tk.END)
         self.tree.selection_remove(self.tree.selection())
+        self.btn_new_visit.config(state=tk.DISABLED)
+        self._clear_hist()
 
     def on_select(self, _evt: object = None) -> None:
         sel = self.tree.selection()
         if not sel:
             return
-        self.selected_id = int(sel[0])
-        row = self.repo.get(self.selected_id)
+        try:
+            paciente_id = int(sel[0])
+        except ValueError:
+            warn("Selección inválida.")
+            return
+
+        self.selected_id = paciente_id
+        row = self.repo.get(paciente_id)
         if not row:
             return
+
         self.cedula.set(row["cedula"] or "")
         self.apellidos.set(row["apellidos"] or "")
         self.nombres.set(row["nombres"] or "")
@@ -127,6 +169,9 @@ class PatientsView(ttk.Frame):
         set_text(self.ant_p, row["antecedentes_personales"])
         set_text(self.ant_f, row["antecedentes_familiares"])
 
+        self.btn_new_visit.config(state=tk.NORMAL)
+        self._load_hist(paciente_id)
+
     def save(self) -> None:
         try:
             p = PatientUpsert(
@@ -140,7 +185,7 @@ class PatientsView(ttk.Frame):
                 antecedentes_personales=self.ant_p.get("1.0", tk.END).strip(),
                 antecedentes_familiares=self.ant_f.get("1.0", tk.END).strip(),
             )
-            if self.selected_id:
+            if self.selected_id is not None:
                 self.repo.update(p)
                 info("Paciente actualizado.")
             else:
@@ -153,3 +198,11 @@ class PatientsView(ttk.Frame):
             warn("Ya existe un paciente con esa cédula.")
         except Exception as e:
             error(str(e))
+
+    def open_new_visit(self) -> None:
+        if self.selected_id is None:
+            warn("Selecciona un paciente primero.")
+            return
+        win = NewVisitWindow(self, self.conn, paciente_id=self.selected_id)
+        self.wait_window(win)
+        self._load_hist(self.selected_id)
