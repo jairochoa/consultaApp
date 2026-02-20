@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tkinter as tk
 from tkinter import messagebox, ttk
+from turtle import right
 
 from consultorio.domain.rules import DomainError
 from consultorio.repos.patients import PatientRepo, PatientUpsert
@@ -30,80 +31,137 @@ class PatientsView(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
-        top = ttk.Frame(self)
-        top.pack(fill=tk.X, padx=12, pady=12)
-
-        ttk.Label(top, text="Buscar (cédula / apellido / nombre):").pack(side=tk.LEFT)
-        self.q = tk.StringVar()
-        ttk.Entry(top, textvariable=self.q, width=34).pack(side=tk.LEFT, padx=6)
-        ttk.Button(top, text="Buscar", command=self.refresh).pack(side=tk.LEFT, padx=6)
-
-        ttk.Button(top, text="Nuevo", command=self.new_patient).pack(side=tk.RIGHT)
-        self.btn_new_visit = ttk.Button(
-            top, text="Nueva cita", command=self.open_new_visit, state=tk.DISABLED
-        )
-        self.btn_new_visit.pack(side=tk.RIGHT, padx=8)
-
+        # ---------- Layout principal ----------
         body = ttk.Frame(self)
-        body.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
+        body.pack(fill=tk.BOTH, expand=True, padx=12, pady=(12, 12))
 
-        left = ttk.Frame(body)
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # ---------- Estilos ----------
+        style = ttk.Style()
 
-        cols = ("cedula", "apellidos", "nombres", "telefono")
-        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=18)
-        for c, t, w in [
-            ("cedula", "Cédula", 120),
-            ("apellidos", "Apellidos", 200),
-            ("nombres", "Nombres", 200),
-            ("telefono", "Teléfono", 150),
-        ]:
-            self.tree.heading(c, text=t)
-            self.tree.column(c, width=w, anchor="w")
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
-        self.tree.pack(fill=tk.BOTH, expand=True)
+        # Treeview Pacientes
+        style.configure("Pacientes.Treeview.Heading", font=("Segoe UI", 9, "bold"))
+        style.configure(
+            "Pacientes.Treeview",
+            rowheight=22,
+            background="#ffffff",
+            fieldbackground="#ffffff",
+        )
+        style.map(
+            "Pacientes.Treeview",
+            background=[("selected", "#f1f838")],  # más suave que verde intenso
+            foreground=[("selected", "#000000")],
+        )
 
-        hist = ttk.LabelFrame(left, text="Historial de citas (paciente seleccionado)")
-        hist.pack(fill=tk.BOTH, expand=False, pady=(10, 0))
+        # Panel Detalle/Edición más limpio
+        style.configure("Clean.TLabelframe", padding=(10, 8))
+        style.configure("Clean.TLabelframe.Label", font=("Segoe UI", 10, "bold"))
 
-        cols_h = ("fecha", "motivo", "pago")
-        self.tree_hist = ttk.Treeview(hist, columns=cols_h, show="headings", height=6)
-        for c, t, w in [
-            ("fecha", "Fecha", 170),
-            ("motivo", "Motivo", 520),
-            ("pago", "Pago", 120),
-        ]:
-            self.tree_hist.heading(c, text=t)
-            self.tree_hist.column(c, width=w, anchor="w")
-        self.tree_hist.pack(fill=tk.BOTH, expand=True)
+        # ---------- Panel Detalle/Edición (IZQUIERDA) ----------
+        right = ttk.LabelFrame(
+            body, text="Detalle / Edición", style="Clean.TLabelframe", labelanchor="nw"
+        )
+        right.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 12))
+        right.configure(width=400)  # ~30% menos ancho aprox
+        right.pack_propagate(False)
 
-        right = ttk.LabelFrame(body, text="Detalle / Edición")
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(12, 0))
-
+        # Variables
         self.cedula = tk.StringVar()
         self.apellidos = tk.StringVar()
         self.nombres = tk.StringVar()
         self.telefono = tk.StringVar()
         self.fnac = tk.StringVar()
 
+        # Entradas
         self._row_entry(right, "Cédula:", self.cedula)
         self._row_entry(right, "Apellidos:", self.apellidos)
         self._row_entry(right, "Nombres:", self.nombres)
         self._row_entry(right, "Teléfono:", self.telefono)
         self._row_entry(right, "F. Nac (YYYY-MM-DD):", self.fnac, width=18)
 
-        self.domicilio = self._row_text(right, "Domicilio:", height=3)
-        self.ant_p = self._row_text(right, "Antecedentes personales:", height=3)
-        self.ant_f = self._row_text(right, "Antecedentes familiares:", height=3)
+        # Textareas compactas
+        self.domicilio = self._row_text(right, "Domicilio:", height=2)
+        self.ant_p = self._row_text(right, "Antecedentes personales:", height=2)
+        self.ant_f = self._row_text(right, "Antecedentes familiares:", height=2)
 
+        # Tab en Text -> siguiente campo (requiere _focus_next/_focus_prev en la clase)
+        for t in (self.domicilio, self.ant_p, self.ant_f):
+            t.bind("<Tab>", self._focus_next)
+            t.bind("<Shift-Tab>", self._focus_prev)
+
+        # Botonera (si luego quieres colores, lo hacemos aquí)
         btns = ttk.Frame(right)
-        btns.pack(fill=tk.X, padx=10, pady=10)
-        ttk.Button(btns, text="Guardar", command=self.save).pack(side=tk.LEFT)
-        ttk.Button(btns, text="Limpiar", command=self.new_patient).pack(side=tk.LEFT, padx=8)
+        btns.pack(fill=tk.X, padx=10, pady=(6, 10))
+
         self.btn_delete = ttk.Button(
             btns, text="Eliminar", command=self.delete_patient, state=tk.DISABLED
         )
-        self.btn_delete.pack(side=tk.LEFT, padx=8)
+        self.btn_delete.pack(side=tk.LEFT)
+
+        ttk.Button(btns, text="Guardar", command=self.save).pack(side=tk.RIGHT)
+        ttk.Button(btns, text="Limpiar", command=self.new_patient).pack(side=tk.RIGHT, padx=8)
+
+        # ---------- Panel Pacientes (DERECHA) ----------
+        left = ttk.Frame(body)
+        left.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Barra superior SOLO para pacientes (queda "justo sobre el panel de pacientes")
+        top_pat = ttk.Frame(left)
+        top_pat.pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Label(top_pat, text="Buscar (cédula / apellido / nombre):").pack(side=tk.LEFT)
+
+        self.q = tk.StringVar()
+        ttk.Entry(top_pat, textvariable=self.q, width=34).pack(side=tk.LEFT, padx=6)
+        ttk.Button(top_pat, text="Buscar", command=self.refresh).pack(side=tk.LEFT, padx=6)
+
+        # Botones a la IZQUIERDA (como pediste)
+        self.btn_new_visit = ttk.Button(
+            top_pat, text="Nueva cita", command=self.open_new_visit, state=tk.DISABLED
+        )
+        self.btn_new_visit.pack(side=tk.LEFT, padx=(12, 6))
+
+        ttk.Button(top_pat, text="Nuevo", command=self.new_patient).pack(side=tk.LEFT)
+
+        # --- Tree Pacientes ---
+        cols = ("cedula", "apellidos", "nombres", "telefono")
+        self.tree = ttk.Treeview(
+            left, columns=cols, show="headings", height=18, style="Pacientes.Treeview"
+        )
+
+        for c, t, w in [
+            ("cedula", "Cédula", 120),
+            ("apellidos", "Apellidos", 200),
+            ("nombres", "Nombres", 200),
+            ("telefono", "Teléfono", 150),
+        ]:
+            self.tree.heading(c, text=t, anchor="w")
+            self.tree.column(c, width=w, anchor="w")
+
+        self.tree.bind("<<TreeviewSelect>>", self.on_select)
+        self.tree.pack(fill=tk.BOTH, expand=True)
+
+        # --- Historial ---
+        hist = ttk.LabelFrame(
+            left, text="Historial de citas (paciente seleccionado)", labelanchor="nw"
+        )
+        hist.pack(fill=tk.BOTH, expand=False, pady=(10, 0))
+
+        cols_h = ("fecha", "motivo", "pago")
+        self.tree_hist = ttk.Treeview(hist, columns=cols_h, show="headings", height=6)
+
+        for c, t, w in [
+            ("fecha", "Fecha", 170),
+            ("motivo", "Motivo", 520),
+            ("pago", "Pago", 120),
+        ]:
+            self.tree_hist.heading(c, text=t, anchor="w")
+            self.tree_hist.column(c, width=w, anchor="w")
+
+        self.tree_hist.pack(fill=tk.BOTH, expand=True)
+
+        # Zebra del historial (lo dejas como lo tengas; aquí lo puse suave)
+        self.tree_hist.tag_configure("even", background="#5ae758")
+        self.tree_hist.tag_configure("odd", background="#a9d7ae")
 
     def _refresh_selected_patient_history(self) -> None:
         if self.selected_id is not None:
@@ -111,30 +169,49 @@ class PatientsView(ttk.Frame):
 
     def _row_entry(self, master: tk.Misc, label: str, var: tk.StringVar, width: int = 26) -> None:
         row = ttk.Frame(master)
-        row.pack(fill=tk.X, padx=10, pady=6)
-        ttk.Label(row, text=label).pack(side=tk.LEFT)
-        ttk.Entry(row, textvariable=var, width=width).pack(
-            side=tk.LEFT, padx=6, fill=tk.X, expand=True
-        )
+        row.pack(fill=tk.X, padx=10, pady=3)
 
-    def _row_text(self, master: tk.Misc, label: str, height: int = 3) -> tk.Text:
-        ttk.Label(master, text=label).pack(anchor="w", padx=10)
-        t = tk.Text(master, height=height)
-        t.pack(fill=tk.X, padx=10, pady=(0, 6))
+        lbl = ttk.Label(row, text=label, width=18)
+        lbl.pack(side=tk.LEFT)
+
+        ent = ttk.Entry(row, textvariable=var, width=width)
+        ent.pack(side=tk.LEFT, padx=6, fill=tk.X, expand=True)
+
+    def _row_text(
+        self, master: tk.Misc, label: str, height: int = 2, *, with_scroll: bool = True
+    ) -> tk.Text:
+        wrap = ttk.Frame(master)
+        wrap.pack(fill=tk.X, padx=10, pady=(4, 0))
+
+        ttk.Label(wrap, text=label).pack(anchor="w")
+
+        box = ttk.Frame(master)
+        box.pack(fill=tk.X, padx=10, pady=(2, 6))
+
+        t = tk.Text(box, height=height)
+        t.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        if with_scroll:
+            sb = ttk.Scrollbar(box, orient="vertical", command=t.yview)
+            sb.pack(side=tk.RIGHT, fill=tk.Y)
+            t.configure(yscrollcommand=sb.set)
+
         return t
 
     def refresh(self) -> None:
-        # guarda selección para restaurar
-        prev = self.selected_id
+        prev = self.selected_id  # para intentar mantener selección
 
         for i in self.tree.get_children():
             self.tree.delete(i)
 
-        for r in self.repo.search(self.q.get()):
+        rows = self.repo.search(self.q.get())
+        for idx, r in enumerate(rows):
+            tag = "even" if idx % 2 == 0 else "odd"
             self.tree.insert(
                 "",
                 "end",
                 iid=str(r["paciente_id"]),
+                tags=(tag,),
                 values=(r["cedula"], r["apellidos"], r["nombres"], r["telefono"] or ""),
             )
 
@@ -142,8 +219,6 @@ class PatientsView(ttk.Frame):
         if prev is not None and self.tree.exists(str(prev)):
             self.tree.selection_set(str(prev))
             self.tree.see(str(prev))
-            # no llamo on_select para no reescribir lo que el médico está editando,
-            # pero sí refresco historial
             self._load_hist(prev)
 
     def _clear_hist(self) -> None:
@@ -152,10 +227,13 @@ class PatientsView(ttk.Frame):
 
     def _load_hist(self, paciente_id: int) -> None:
         self._clear_hist()
-        for r in self.visits.list_for_patient(paciente_id):
+        rows = self.visits.list_for_patient(paciente_id)
+        for idx, r in enumerate(rows):
+            tag = "even" if idx % 2 == 0 else "odd"
             self.tree_hist.insert(
                 "",
                 "end",
+                tags=(tag,),
                 values=(r["fecha_consulta"], (r["motivo_consulta"] or "")[:120], r["forma_pago"]),
             )
 
@@ -167,6 +245,8 @@ class PatientsView(ttk.Frame):
         self.telefono.set("")
         self.fnac.set("")
         for t in (self.domicilio, self.ant_p, self.ant_f):
+            t.bind("<Tab>", self._focus_next)
+            t.bind("<Shift-Tab>", self._focus_prev)
             t.delete("1.0", tk.END)
         self.tree.selection_remove(self.tree.selection())
         self.btn_new_visit.config(state=tk.DISABLED)
@@ -268,3 +348,11 @@ class PatientsView(ttk.Frame):
             warn(str(e))
         except Exception as e:
             error(str(e))
+
+    def _focus_next(self, event: tk.Event) -> str:
+        event.widget.tk_focusNext().focus_set()
+        return "break"
+
+    def _focus_prev(self, event: tk.Event) -> str:
+        event.widget.tk_focusPrev().focus_set()
+        return "break"

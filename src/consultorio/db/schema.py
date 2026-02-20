@@ -95,9 +95,16 @@ def _ensure_column(conn: sqlite3.Connection, table: str, col: str, col_def: str)
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    # Recomendado en SQLite para que respeten FKs (si tu connect() no lo hace ya)
     conn.execute("PRAGMA foreign_keys = ON;")
 
     for stmt in _SCHEMA:
         conn.execute(stmt)
+    conn.commit()
+
+    # Backward-compatible adds (por si DB ya existía)
+    _ensure_column(conn, "estudios", "resultado_editado_en", "resultado_editado_en TEXT")
+
+    # Opcional: índice para performance en listados
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_estudios_ordenado_en ON estudios(ordenado_en)")
+
     conn.commit()

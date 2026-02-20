@@ -2,22 +2,25 @@ from __future__ import annotations
 
 import sqlite3
 import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 
 from consultorio.config import load_config
 from consultorio.domain.rules import DomainError
-from consultorio.repos.studies import StudyRepo
+from consultorio.repos.studies import StudyRepo, STATES_ORDER
 from consultorio.ui.events import EventBus
 from consultorio.ui.widgets.common import error, info, warn
+from consultorio.ui.windows.edit_result import EditResultWindow
+
+
+STATUS_COLS = ["ordenado", "enviado", "pagado", "recibido", "entregado"]
 
 
 class StudiesAdminView(ttk.Frame):
     """
-    Vista administrativa para gestionar estudios:
-    - Asignar centro histológico
-    - Cambiar estado (ordenado/enviado/pagado/recibido/entregado) de forma SECUENCIAL
-    - Cargar resultado (solo si recibido/entregado)
+    Tablero de estudios (SIN panel de detalle):
+    - Asignar centro histológico en lote (selección múltiple)
+    - Cambiar estados con click en columnas (secuencial estricto + corrección con confirmación)
+    - Doble click: editar resultado (solo recibido/entregado)
     """
 
     def __init__(self, master: tk.Misc, conn: sqlite3.Connection, *, bus: EventBus):
@@ -25,311 +28,144 @@ class StudiesAdminView(ttk.Frame):
         self.conn = conn
         self.bus = bus
         self.bus.subscribe("studies", self.refresh)
-        self.repo = StudyRepo(conn)
-        self.cfg = load_config()
 
-        self.selected_id: int | None = None
+        self.cfg = load_config()
+        self.repo = StudyRepo(conn)
+
+        self.center_var = tk.StringVar(value="")
 
         self._build()
         self.refresh()
 
-    # ---------------- UI ----------------
-
     def _build(self) -> None:
-        top = ttk.Frame(self)
-        top.pack(fill=tk.X, padx=12, pady=12)
+        style = ttk.Style()
 
-        ttk.Label(top, text="Administración de estudios").pack(side=tk.LEFT)
-        ttk.Button(top, text="Refrescar", command=self.refresh).pack(side=tk.RIGHT)
-
-        body = ttk.Frame(self)
-        body.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
-
-        # ---- Left: list ----
-        left = ttk.Frame(body)
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        cols = ("estado", "tipo", "subtipo", "enviado_en", "paciente", "cedula", "centro")
-        self.tree = ttk.Treeview(left, columns=cols, show="headings", height=20)
-        self.tree.heading("estado", text="Estado")
-        self.tree.heading("tipo", text="Tipo")
-        self.tree.heading("subtipo", text="Subtipo")
-        self.tree.heading("enviado_en", text="Enviado")
-        self.tree.heading("paciente", text="Paciente")
-        self.tree.heading("cedula", text="Cédula")
-        self.tree.heading("centro", text="Centro")
-
-        self.tree.column("estado", width=110, anchor="w")
-        self.tree.column("tipo", width=90, anchor="w")
-        self.tree.column("subtipo", width=140, anchor="w")
-        self.tree.column("enviado_en", width=150, anchor="w")
-        self.tree.column("paciente", width=230, anchor="w")
-        self.tree.column("cedula", width=110, anchor="w")
-        self.tree.column("centro", width=210, anchor="w")
-
-        self.tree.bind("<<TreeviewSelect>>", self.on_select)
-        self.tree.pack(fill=tk.BOTH, expand=True)
-
-        # ---- Right: detail ----
-        right = ttk.LabelFrame(body, text="Detalle / Acciones")
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(12, 0))
-
-        self.lbl_title = ttk.Label(
-            right, text="Selecciona un estudio", font=("Segoe UI", 10, "bold")
+        # Encabezados en negrita
+        style.configure("Estudios.Treeview.Heading", font=("Segoe UI", 9, "bold"))
+        style.configure(
+            "Estudios.Treeview",
+            font=("Segoe UI Emoji", 10),  # <-- prueba
+            rowheight=22,
+            background="#ffffff",
+            fieldbackground="#ffffff",
         )
-        self.lbl_title.pack(anchor="w", padx=10, pady=(10, 0))
+        style.map(
+            "Estudios.Treeview",
+            background=[("selected", "#cce8ff")],
+            foreground=[("selected", "#000000")],
+        )
 
-        # Centro histológico
-        row_c = ttk.Frame(right)
-        row_c.pack(fill=tk.X, padx=10, pady=(10, 0))
-        ttk.Label(row_c, text="Centro histológico:").pack(side=tk.LEFT)
+        # ---- Top bar ----
+        top = ttk.Frame(self)
+        top.pack(fill=tk.X, padx=12, pady=(12, 6))
 
-        self.center_var = tk.StringVar(value="")
-        self.cbo_center = ttk.Combobox(row_c, textvariable=self.center_var, width=28)
+        ttk.Label(top, text="Centro histológico:").pack(side=tk.LEFT)
+
+        self.cbo_center = ttk.Combobox(
+            top,
+            textvariable=self.center_var,
+            values=list(getattr(self.cfg.clinic, "histology_centers", []) or []),
+            width=35,
+        )
         self.cbo_center.pack(side=tk.LEFT, padx=8)
 
-        self.btn_set_center = ttk.Button(
-            row_c, text="Asignar", command=self.assign_center, state=tk.DISABLED
+        ttk.Button(top, text="Asignar a seleccionados", command=self.assign_center_bulk).pack(
+            side=tk.LEFT
         )
-        self.btn_set_center.pack(side=tk.LEFT)
-
-        # Estados (secuenciales)
-        ttk.Label(right, text="Estado (secuencial):").pack(anchor="w", padx=10, pady=(12, 0))
-        st = ttk.Frame(right)
-        st.pack(fill=tk.X, padx=10, pady=(6, 0))
-
-        self.btn_state_ordenado = ttk.Button(
-            st, text="Ordenado", command=lambda: self.set_status("ordenado")
-        )
-        self.btn_state_enviado = ttk.Button(
-            st, text="Enviado", command=lambda: self.set_status("enviado")
-        )
-        self.btn_state_pagado = ttk.Button(
-            st, text="Pagado", command=lambda: self.set_status("pagado")
-        )
-        self.btn_state_recibido = ttk.Button(
-            st, text="Recibido", command=lambda: self.set_status("recibido")
-        )
-        self.btn_state_entregado = ttk.Button(
-            st, text="Entregado", command=lambda: self.set_status("entregado")
+        ttk.Button(top, text="Limpiar selección", command=self._clear_selection).pack(
+            side=tk.LEFT, padx=8
         )
 
-        self.btn_state_ordenado.pack(side=tk.LEFT, padx=(0, 6))
-        self.btn_state_enviado.pack(side=tk.LEFT, padx=(0, 6))
-        self.btn_state_pagado.pack(side=tk.LEFT, padx=(0, 6))
-        self.btn_state_recibido.pack(side=tk.LEFT, padx=(0, 6))
-        self.btn_state_entregado.pack(side=tk.LEFT)
+        # ---- Table ----
+        frame = ttk.Frame(self)
+        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
 
-        # Fechas por estado (solo display)
-        self.meta = ttk.Label(right, text="", justify=tk.LEFT)
-        self.meta.pack(anchor="w", padx=10, pady=(10, 0))
-
-        # --- Corrección administrativa ---
-        ttk.Separator(right).pack(fill=tk.X, padx=10, pady=(10, 6))
-        ttk.Label(right, text="Corrección (admin):").pack(anchor="w", padx=10)
-
-        fix_row = ttk.Frame(right)
-        fix_row.pack(fill=tk.X, padx=10, pady=(6, 0))
-
-        self.fix_status_var = tk.StringVar(value="ordenado")
-        self.cbo_fix_status = ttk.Combobox(
-            fix_row,
-            textvariable=self.fix_status_var,
-            values=["ordenado", "enviado", "pagado", "recibido", "entregado"],
-            width=14,
-            state="readonly",
+        cols = (
+            "cedula",
+            "paciente",
+            "tipo",
+            "subtipo",
+            "centro",
+            "ordenado",
+            "enviado",
+            "pagado",
+            "recibido",
+            "entregado",
         )
-        self.cbo_fix_status.pack(side=tk.LEFT)
 
-        self.btn_fix_status = ttk.Button(
-            fix_row,
-            text="Aplicar corrección",
-            command=self.apply_status_correction,
-            state=tk.DISABLED,
+        self.tree = ttk.Treeview(
+            frame,
+            columns=cols,
+            show="headings",
+            style="Estudios.Treeview",
+            height=20,
+            selectmode="extended",
         )
-        self.btn_fix_status.pack(side=tk.LEFT, padx=8)
 
-        # Resultado
-        ttk.Label(right, text="Resultado (máx 300):").pack(anchor="w", padx=10, pady=(12, 0))
-        self.txt_result = tk.Text(right, height=6, width=48)
-        self.txt_result.pack(fill=tk.X, padx=10, pady=(6, 0))
+        headings = [
+            ("cedula", "Cédula", 110),
+            ("paciente", "Nombre-Apellido", 220),
+            ("tipo", "Estudio", 90),
+            ("subtipo", "Subtipo", 140),
+            ("centro", "Centro", 180),
+            ("ordenado", "Ordenado", 90),
+            ("enviado", "Enviado", 90),
+            ("pagado", "Pagado", 90),
+            ("recibido", "Recibido", 90),
+            ("entregado", "Entregado", 90),
+        ]
+        for c, t, w in headings:
+            self.tree.heading(c, text=t, anchor="w")
+            self.tree.column(c, width=w, anchor="w")
 
-        self.btn_save_result = ttk.Button(right, text="Guardar resultado", command=self.save_result)
-        self.btn_save_result.pack(anchor="e", padx=10, pady=(10, 10))
+        self.tree.pack(fill=tk.BOTH, expand=True)
 
-        # Estado inicial de controles
-        self._set_selected(None)
+        # Zebra striping
+        self.tree.tag_configure("even", background="#ffffff")
+        self.tree.tag_configure("odd", background="#f3f3f3")
 
-        # Centros iniciales (YAML + DB)
+        # Click handlers
+        self.tree.bind("<Button-1>", self._on_click_cell, add=True)
+        self.tree.bind("<Double-1>", self._on_double_click, add=True)
+
         self._refresh_center_values()
 
-    # ---------------- Data helpers ----------------
+    # ---------------- Data ----------------
 
     def refresh(self) -> None:
-        # recargar config por si editaste YAML mientras la app está abierta
-        self.cfg = load_config()
-        self._refresh_center_values()
+        # repoblar tabla (auto, sin botón)
+        for i in self.tree.get_children():
+            self.tree.delete(i)
 
-        self._clear_list()
-        rows = self._list_open()
-        for r in rows:
+        rows = self.repo.list_admin(limit=1500)
+        for idx, r in enumerate(rows):
+            tag = "even" if idx % 2 == 0 else "odd"
             self.tree.insert(
                 "",
                 "end",
                 iid=str(r["estudio_id"]),
+                tags=(tag,),
                 values=(
-                    r["estado_actual"],
+                    r["cedula"],
+                    r["paciente"],
                     r["tipo"],
                     r["subtipo"],
-                    r["enviado_en"] or "",
-                    r["paciente"],
-                    r["cedula"],
                     r["centro_nombre"] or "",
+                    self._mark(r["ordenado_en"]),
+                    self._mark(r["enviado_en"]),
+                    self._mark(r["pagado_en"]),
+                    self._mark(r["recibido_en"]),
+                    self._mark(r["entregado_en"]),
                 ),
             )
-        self._set_selected(None)
 
-    def _clear_list(self) -> None:
-        for i in self.tree.get_children():
-            self.tree.delete(i)
+    def _mark(self, ts: object) -> str:
+        return "✔" if ts else "✘"
 
-    def _list_open(self) -> list[sqlite3.Row]:
-        return self.conn.execute(
-            """
-            SELECT e.estudio_id, e.tipo, e.subtipo, e.estado_actual,
-                   e.ordenado_en, e.enviado_en, e.pagado_en, e.recibido_en, e.entregado_en,
-                   e.resultado,
-                   e.centro_id,
-                   ch.nombre AS centro_nombre,
-                   p.cedula,
-                   p.apellidos || ', ' || p.nombres AS paciente
-            FROM estudios e
-            JOIN pacientes p ON p.paciente_id = e.paciente_id
-            LEFT JOIN centros_histologicos ch ON ch.centro_id = e.centro_id
-            WHERE e.estado_actual <> 'entregado'
-            ORDER BY
-                CASE e.estado_actual
-                    WHEN 'ordenado' THEN 1
-                    WHEN 'enviado' THEN 2
-                    WHEN 'pagado' THEN 3
-                    WHEN 'recibido' THEN 4
-                    ELSE 5
-                END,
-                datetime(e.ordenado_en) DESC
-            LIMIT 500
-            """
-        ).fetchall()
+    def _clear_selection(self) -> None:
+        self.tree.selection_remove(self.tree.selection())
 
-    def _get_one(self, estudio_id: int) -> sqlite3.Row | None:
-        return self.conn.execute(
-            """
-            SELECT e.estudio_id, e.tipo, e.subtipo, e.estado_actual,
-                   e.ordenado_en, e.enviado_en, e.pagado_en, e.recibido_en, e.entregado_en,
-                   e.resultado,
-                   e.centro_id,
-                   ch.nombre AS centro_nombre,
-                   p.cedula,
-                   p.apellidos || ', ' || p.nombres AS paciente
-            FROM estudios e
-            JOIN pacientes p ON p.paciente_id = e.paciente_id
-            LEFT JOIN centros_histologicos ch ON ch.centro_id = e.centro_id
-            WHERE e.estudio_id=?
-            """,
-            (estudio_id,),
-        ).fetchone()
-
-    def _disable_all_actions(self) -> None:
-        self.btn_set_center.config(state=tk.DISABLED)
-
-        for b in (
-            self.btn_state_ordenado,
-            self.btn_state_enviado,
-            self.btn_state_pagado,
-            self.btn_state_recibido,
-            self.btn_state_entregado,
-        ):
-            b.config(state=tk.DISABLED)
-
-        self.txt_result.config(state=tk.NORMAL)
-        self.txt_result.delete("1.0", tk.END)
-        self.txt_result.config(state=tk.DISABLED)
-        self.btn_save_result.config(state=tk.DISABLED)
-
-    def _set_selected(self, estudio_id: int | None) -> None:
-        self.selected_id = estudio_id
-        self._disable_all_actions()
-
-        # Si tienes corrección admin, desactívala por defecto aquí
-        if hasattr(self, "btn_fix_status"):
-            self.btn_fix_status.config(state=tk.DISABLED)
-
-        if estudio_id is None:
-            self.lbl_title.config(text="Selecciona un estudio")
-            self.center_var.set("")
-            self.meta.config(text="")
-            return
-
-        row = self._get_one(estudio_id)
-        if not row:
-            self.lbl_title.config(text="Selecciona un estudio")
-            self.center_var.set("")
-            self.meta.config(text="")
-            return
-
-        self.lbl_title.config(
-            text=f"#{row['estudio_id']}  {row['tipo']} - {row['subtipo']}  |  {row['paciente']}"
-        )
-
-        # Centro mostrado/seleccionado
-        self.center_var.set(row["centro_nombre"] or "")
-        self.btn_set_center.config(state=tk.NORMAL)
-
-        # Si tienes corrección admin: habilitar y setear estado actual
-        if hasattr(self, "btn_fix_status") and hasattr(self, "fix_status_var"):
-            self.btn_fix_status.config(state=tk.NORMAL)
-            self.fix_status_var.set(str(row["estado_actual"]))
-
-        # Fechas
-        self.meta.config(
-            text=(
-                f"Estado actual: {row['estado_actual']}\n"
-                f"Ordenado:  {row['ordenado_en'] or '-'}\n"
-                f"Enviado:   {row['enviado_en'] or '-'}\n"
-                f"Pagado:    {row['pagado_en'] or '-'}\n"
-                f"Recibido:  {row['recibido_en'] or '-'}\n"
-                f"Entregado: {row['entregado_en'] or '-'}\n"
-            )
-        )
-
-        # Secuencial: habilitar SOLO el siguiente botón (enviado exige centro asignado en DB)
-        state = str(row["estado_actual"])
-        has_center = row["centro_id"] is not None
-
-        next_by_state = {
-            "ordenado": "enviado",
-            "enviado": "pagado",
-            "pagado": "recibido",
-            "recibido": "entregado",
-            "entregado": None,
-        }
-        nxt = next_by_state.get(state)
-
-        if nxt == "enviado":
-            self.btn_state_enviado.config(state=tk.NORMAL if has_center else tk.DISABLED)
-        elif nxt == "pagado":
-            self.btn_state_pagado.config(state=tk.NORMAL)
-        elif nxt == "recibido":
-            self.btn_state_recibido.config(state=tk.NORMAL)
-        elif nxt == "entregado":
-            self.btn_state_entregado.config(state=tk.NORMAL)
-
-        # Resultado (solo recibido/entregado)
-        can_edit_result = state in ("recibido", "entregado")
-        self.txt_result.config(state=tk.NORMAL)
-        self.txt_result.delete("1.0", tk.END)
-        self.txt_result.insert("1.0", row["resultado"] or "")
-        self.txt_result.config(state=tk.NORMAL if can_edit_result else tk.DISABLED)
-        self.btn_save_result.config(state=tk.NORMAL if can_edit_result else tk.DISABLED)
+    # ---------------- Centers ----------------
 
     def _refresh_center_values(self) -> None:
         cfg_centers = list(getattr(self.cfg.clinic, "histology_centers", []) or [])
@@ -339,7 +175,6 @@ class StudiesAdminView(ttk.Frame):
                 "SELECT nombre FROM centros_histologicos ORDER BY nombre"
             ).fetchall()
         ]
-
         seen: set[str] = set()
         values: list[str] = []
         for x in cfg_centers + db_centers:
@@ -347,20 +182,7 @@ class StudiesAdminView(ttk.Frame):
             if x and x not in seen:
                 seen.add(x)
                 values.append(x)
-
         self.cbo_center["values"] = values
-
-    # ---------------- Actions ----------------
-
-    def on_select(self, _evt: object = None) -> None:
-        sel = self.tree.selection()
-        if not sel:
-            self._set_selected(None)
-            return
-        try:
-            self._set_selected(int(sel[0]))
-        except ValueError:
-            self._set_selected(None)
 
     def _get_or_create_center_id(self, name: str) -> int:
         row = self.conn.execute(
@@ -375,93 +197,52 @@ class StudiesAdminView(ttk.Frame):
             (name,),
         )
         self.conn.commit()
-        last_id = cur.lastrowid
-        if last_id is None:
+        last = cur.lastrowid
+        if last is None:
             raise RuntimeError("No se pudo crear el centro histológico.")
-        return int(last_id)
+        return int(last)
 
-    def assign_center(self) -> None:
-        if self.selected_id is None:
-            warn("Selecciona un estudio primero.")
+    def assign_center_bulk(self) -> None:
+        sel = self.tree.selection()
+        if not sel:
+            warn("Selecciona uno o más estudios.")
             return
-
-        sid = self.selected_id  # guardar antes de refresh()
 
         name = (self.center_var.get() or "").strip()
         if not name:
-            warn("Indica el centro histológico.")
+            warn("Selecciona un centro histológico.")
+            return
+
+        ids: list[int] = []
+        for x in sel:
+            try:
+                ids.append(int(x))
+            except ValueError:
+                continue
+
+        if not ids:
+            warn("Selección inválida.")
             return
 
         try:
             centro_id = self._get_or_create_center_id(name)
-            self.repo.set_center(sid, centro_id)
-            self.bus.publish("studies")
 
-            # Actualiza valores del combo (YAML + DB) y refresca la lista
+            # Confirmar sobreescritura si hay centros diferentes
+            rows = [self.repo.get_admin(i) for i in ids]
+            diff = any((r and r["centro_id"] and int(r["centro_id"]) != centro_id) for r in rows)
+            if diff:
+                ok = messagebox.askyesno(
+                    "Confirmar",
+                    "Algunos estudios ya tienen centro asignado.\n"
+                    "¿Deseas sobreescribir el centro para los seleccionados?",
+                    parent=self,
+                )
+                if not ok:
+                    return
+
+            self.repo.set_center_many(ids, centro_id)
             self._refresh_center_values()
-            info("Centro asignado.")
-            self.refresh()
-
-            # Re-seleccionar el estudio si sigue existiendo
-            if self.tree.exists(str(sid)):
-                self.tree.selection_set(str(sid))
-                self.tree.see(str(sid))
-                self._set_selected(sid)
-            else:
-                self._set_selected(None)
-
-        except DomainError as e:
-            warn(str(e))
-        except Exception as e:
-            error(str(e))
-
-    def set_status(self, status: str) -> None:
-        if self.selected_id is None:
-            warn("Selecciona un estudio primero.")
-            return
-
-        sid = self.selected_id  # 👈 guardar antes del refresh()
-
-        try:
-            self.repo.set_status(sid, status)
-            info(f"Estado actualizado: {status}.")
-            self.refresh()
-
-            # Re-seleccionar el estudio si sigue existiendo en el tree
-            if self.tree.exists(str(sid)):
-                self.tree.selection_set(str(sid))
-                self.tree.see(str(sid))
-                self._set_selected(sid)
-            else:
-                self._set_selected(None)
-            self.bus.publish("studies")
-            self.bus.publish("visits")  # opcional si Today usa conteos de estudios
-
-        except DomainError as e:
-            warn(str(e))
-        except Exception as e:
-            error(str(e))
-
-    def save_result(self) -> None:
-        if self.selected_id is None:
-            warn("Selecciona un estudio primero.")
-            return
-
-        sid = self.selected_id  # 👈 guardar antes del refresh()
-
-        try:
-            txt = self.txt_result.get("1.0", tk.END).strip()
-            self.repo.set_result(sid, txt)
-            info("Resultado guardado.")
-            self.refresh()
-
-            # Re-seleccionar el estudio si sigue existiendo
-            if self.tree.exists(str(sid)):
-                self.tree.selection_set(str(sid))
-                self.tree.see(str(sid))
-                self._set_selected(sid)
-            else:
-                self._set_selected(None)
+            info("Centro asignado a los seleccionados.")
             self.bus.publish("studies")
 
         except DomainError as e:
@@ -469,39 +250,142 @@ class StudiesAdminView(ttk.Frame):
         except Exception as e:
             error(str(e))
 
-    def apply_status_correction(self) -> None:
-        if self.selected_id is None:
-            warn("Selecciona un estudio primero.")
+    # ---------------- Cell clicks (status) ----------------
+
+    def _on_click_cell(self, event: tk.Event) -> None:
+        # Identificar celda
+        region = self.tree.identify("region", event.x, event.y)
+        if region != "cell":
             return
 
-        sid = self.selected_id
-        new_status = (self.fix_status_var.get() or "").strip()
-        if not new_status:
-            warn("Selecciona un estado.")
+        row_id = self.tree.identify_row(event.y)
+        col_id = self.tree.identify_column(event.x)  # "#1", "#2", ...
+
+        if not row_id:
             return
 
-        ok = messagebox.askyesno(
-            "Confirmar corrección",
-            f"Vas a cambiar el estado del estudio #{sid} a '{new_status}'.\n\n"
-            "Esto es una corrección administrativa. ¿Deseas continuar?",
-            parent=self,
+        # Mapeo columna -> nombre
+        try:
+            col_index = int(col_id.replace("#", "")) - 1
+        except ValueError:
+            return
+
+        columns = self.tree["columns"]
+        if col_index < 0 or col_index >= len(columns):
+            return
+
+        col_name = columns[col_index]
+        if col_name not in STATUS_COLS:
+            return  # click en columna no-estado
+
+        # evitar toggle de "ordenado"
+        if col_name == "ordenado":
+            warn("El estado 'ordenado' no se modifica manualmente.")
+            return
+
+        try:
+            estudio_id = int(row_id)
+        except ValueError:
+            return
+
+        # Si está marcado y se va a desmarcar, pedimos confirmación por cascada
+        row = self.repo.get_admin(estudio_id)
+        if not row:
+            warn("Estudio no encontrado.")
+            return
+
+        # ¿Está marcado?
+        is_marked = bool(row[f"{col_name}_en"])
+        if is_marked:
+            # Estados que se desmarcarán (este y posteriores)
+            idx = STATES_ORDER.index(col_name)
+            will_clear = ", ".join(STATES_ORDER[idx:])
+            ok = messagebox.askyesno(
+                "Confirmar corrección",
+                f"Vas a desmarcar '{col_name}'.\n"
+                f"Esto también desmarcará: {will_clear}.\n\n"
+                "¿Deseas continuar?",
+                parent=self,
+            )
+            if not ok:
+                return
+
+        # Toggle en repo (aplica reglas secuenciales y cascada)
+        try:
+            new_state, _affected = self.repo.toggle_state(estudio_id, col_name)
+            self.bus.publish("studies")
+            # Si el click fue en "entregado" y quedó marcado, abrir popup si falta resultado
+            if col_name == "entregado":
+                row2 = self.repo.get_admin(estudio_id)
+                if row2 and row2["entregado_en"]:
+                    self._maybe_open_result_on_delivered(estudio_id)
+
+        except DomainError as e:
+            warn(str(e))
+        except Exception as e:
+            error(str(e))
+
+    # ---------------- Double click (resultado) ----------------
+
+    def _on_double_click(self, event: tk.Event) -> None:
+        row_id = self.tree.identify_row(event.y)
+        if not row_id:
+            return
+        try:
+            estudio_id = int(row_id)
+        except ValueError:
+            return
+
+        row = self.repo.get_admin(estudio_id)
+        if not row:
+            return
+
+        # opcional: solo permitir editar si recibido/entregado
+        if not (row["recibido_en"] or row["entregado_en"]):
+            warn("Solo puedes cargar resultado si está en 'recibido' o 'entregado'.")
+            return
+
+        win = EditResultWindow(
+            self,
+            self.repo,
+            estudio_id=estudio_id,
+            initial_text=(row["resultado"] or ""),
+            on_saved=lambda: self.bus.publish("studies"),
         )
-        if not ok:
+        self.wait_window(win)
+
+    def _maybe_open_result_on_delivered(self, estudio_id: int) -> None:
+        """Si el estudio quedó entregado y no tiene resultado, abre el popup.
+        Si el médico cierra sin guardar, muestra advertencia.
+        """
+        row = self.repo.get_admin(estudio_id)
+        if not row:
             return
 
-        try:
-            self.repo.set_status_override(sid, new_status)
-            info(f"Estado corregido a: {new_status}.")
-            self.refresh()
+        if not row["entregado_en"]:
+            return
 
-            if self.tree.exists(str(sid)):
-                self.tree.selection_set(str(sid))
-                self.tree.see(str(sid))
-                self._set_selected(sid)
-            else:
-                self._set_selected(None)
+        if (row["resultado"] or "").strip():
+            return  # ya tiene resultado
 
-        except DomainError as e:
-            warn(str(e))
-        except Exception as e:
-            error(str(e))
+        win = EditResultWindow(
+            self,
+            self.repo,
+            estudio_id=estudio_id,
+            initial_text="",
+            on_saved=lambda: self.bus.publish("studies"),
+        )
+        self.wait_window(win)
+
+        # Si cerró sin guardar y sigue entregado sin resultado, advertir
+        row2 = self.repo.get_admin(estudio_id)
+        if (
+            row2
+            and row2["entregado_en"]
+            and not (row2["resultado"] or "").strip()
+            and not win.saved
+        ):
+            warn(
+                "El estudio quedó como 'Entregado' pero no se guardó el resultado.\n"
+                "Puedes cargarlo luego con doble click sobre el estudio."
+            )
