@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tkinter as tk
 from tkinter import messagebox, ttk
+from datetime import date  # arriba del archivo (imports)
 
 from consultorio.domain.rules import DomainError
 from consultorio.repos.patients import PatientRepo, PatientUpsert
@@ -82,6 +83,18 @@ class PatientsView(ttk.Frame):
             validate_chars=self._valid_date,
             format_on_blur=self._fmt_date,
         )
+
+        # ---- Edad (dinámica) ----
+        self.edad = tk.StringVar(value="")
+        ent_edad = self._row_entry(detail, "Edad:", self.edad, width=6)
+        ent_edad.configure(state="readonly")
+
+        # recalcular cuando cambie la fecha
+        self.fnac.trace_add("write", lambda *_: self._update_age())
+
+        # recalcular periódicamente (para que sea “real” respecto a hoy)
+        self._update_age()
+        self.after(60_000, self._tick_age)  # cada 60s (puedes subirlo a 1h si quieres)
 
         self._row_entry(detail, "Cédula:", self.cedula)
 
@@ -392,6 +405,8 @@ class PatientsView(ttk.Frame):
                 self.ent_fnac.delete(0, tk.END)
                 self.ent_fnac._ph_show()
 
+        self._update_age()
+
         def set_text(widget: tk.Text, value: str | None) -> None:
             widget.delete("1.0", tk.END)
             widget.insert("1.0", value or "")
@@ -688,3 +703,48 @@ class PatientsView(ttk.Frame):
     def _fmt_date(self, s: str) -> str:
         # no convierto nada, solo dejo lo que escribió (puedes mejorar luego)
         return s
+
+    def _parse_birthdate(self, s: str) -> date | None:
+        s = (s or "").strip()
+        if not s:
+            return None
+
+        # si está el placeholder activo, no calcular
+        if hasattr(self, "ent_fnac") and getattr(self.ent_fnac, "_ph_on", False):
+            return None
+
+        # soporta dd-mm-aaaa y yyyy-mm-dd
+        try:
+            if "-" in s:
+                parts = s.split("-")
+                if len(parts) != 3:
+                    return None
+                if len(parts[0]) == 4:  # yyyy-mm-dd
+                    y, m, d = map(int, parts)
+                else:  # dd-mm-aaaa
+                    d, m, y = map(int, parts)
+                return date(y, m, d)
+        except Exception:
+            return None
+        return None
+
+    def _calc_age(self, born: date, today: date) -> int:
+        age = today.year - born.year
+        if (today.month, today.day) < (born.month, born.day):
+            age -= 1
+        return max(age, 0)
+
+    def _update_age(self) -> None:
+        born = self._parse_birthdate(self.fnac.get())
+        if not born:
+            self.edad.set("")
+            return
+        today = date.today()
+        self.edad.set(str(self._calc_age(born, today)))
+
+    def _tick_age(self) -> None:
+        # refresco “dinámico” con el paso del tiempo
+        if not self.winfo_exists():
+            return
+        self._update_age()
+        self.after(60_000, self._tick_age)
