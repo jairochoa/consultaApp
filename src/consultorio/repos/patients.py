@@ -17,6 +17,7 @@ class PatientUpsert:
     cedula: str
     nombres: str
     apellidos: str
+    comentario: str
     telefono: str = ""
     fecha_nacimiento: str | None = None
     domicilio: str = ""
@@ -65,14 +66,15 @@ class PatientRepo:
         cur = self.conn.execute(
             """
             INSERT INTO pacientes
-            (cedula, nombres, apellidos, telefono, fecha_nacimiento, domicilio,
+            (cedula, nombres, apellidos, comentario, telefono, fecha_nacimiento, domicilio,
              antecedentes_personales, antecedentes_familiares, actualizado_en)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 p.cedula.strip(),
                 p.nombres.strip(),
                 p.apellidos.strip(),
+                p.comentario.strip(),
                 (p.telefono or "").strip(),
                 p.fecha_nacimiento,
                 (p.domicilio or "").strip(),
@@ -94,7 +96,7 @@ class PatientRepo:
         self.conn.execute(
             """
             UPDATE pacientes SET
-              cedula=?, nombres=?, apellidos=?, telefono=?, fecha_nacimiento=?, domicilio=?,
+              cedula=?, nombres=?, apellidos=?, comentario=?, telefono=?, fecha_nacimiento=?, domicilio=?,
               antecedentes_personales=?, antecedentes_familiares=?, actualizado_en=?
             WHERE paciente_id=?
             """,
@@ -102,6 +104,7 @@ class PatientRepo:
                 p.cedula.strip(),
                 p.nombres.strip(),
                 p.apellidos.strip(),
+                p.comentario.strip(),
                 (p.telefono or "").strip(),
                 p.fecha_nacimiento,
                 (p.domicilio or "").strip(),

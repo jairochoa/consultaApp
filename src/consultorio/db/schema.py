@@ -106,6 +106,8 @@ def migrate(conn: sqlite3.Connection) -> None:
 
     # Backward-compatible adds (por si DB ya existía)
     _ensure_column(conn, "estudios", "resultado_editado_en", "resultado_editado_en TEXT")
+        # --- Migración ligera: nuevo campo comentario en pacientes ---
+    _ensure_column(conn, "pacientes", "comentario", "comentario TEXT")
 
     # Opcional: índice para performance en listados
     conn.execute("CREATE INDEX IF NOT EXISTS idx_estudios_ordenado_en ON estudios(ordenado_en)")

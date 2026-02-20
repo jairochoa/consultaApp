@@ -67,6 +67,7 @@ class PatientsView(ttk.Frame):
         # Variables
         self.nombres = tk.StringVar()
         self.apellidos = tk.StringVar()
+        self.comentario = tk.StringVar()
         self.fnac = tk.StringVar()
         self.cedula = tk.StringVar()
         self.telefono = tk.StringVar()
@@ -75,6 +76,7 @@ class PatientsView(ttk.Frame):
 
         self._row_entry(detail, "Nombres:", self.nombres)
         self._row_entry(detail, "Apellidos:", self.apellidos)
+        self._row_entry(detail, "Comentario:", self.comentario)
 
         self.ent_fnac = self._row_entry(detail, "Fecha Nacimiento:", self.fnac, width=18)
         self._bind_masked_placeholder(
@@ -335,6 +337,7 @@ class PatientsView(ttk.Frame):
         self.selected_id = None
         self.cedula.set("")
         self.apellidos.set("")
+        self.comentario.set("")
         self.nombres.set("")
         self.telefono.set("")
         self.fnac.set("")
@@ -377,6 +380,7 @@ class PatientsView(ttk.Frame):
 
         self.cedula.set(row["cedula"] or "")
         self.apellidos.set(row["apellidos"] or "")
+        self.comentario.set(row["comentario"] or "")
         self.nombres.set(row["nombres"] or "")
 
         # ---------- Teléfono ----------
@@ -428,6 +432,7 @@ class PatientsView(ttk.Frame):
                 paciente_id=self.selected_id,
                 cedula=self.cedula.get().strip(),
                 apellidos=self.apellidos.get().strip(),
+                comentario=self.comentario.get().strip(),
                 nombres=self.nombres.get().strip(),
                 telefono=tel,
                 fecha_nacimiento=(fnac or None),
