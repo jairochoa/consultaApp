@@ -15,6 +15,24 @@ from consultorio.ui.windows.edit_result import EditResultWindow
 
 STATUS_COLS = ["ordenado", "enviado", "pagado", "recibido", "entregado"]
 
+# Paleta de colores moderna
+COLORS = {
+    "primary": "#0d47a1",  # Azul profesional
+    "primary_light": "#42a5f5",  # Azul claro
+    "secondary": "#1565c0",  # Azul secundario
+    "accent": "#00897b",  # Teal
+    "success": "#2e7d32",  # Verde
+    "warning": "#f57c00",  # Naranja
+    "error": "#c62828",  # Rojo
+    "bg_dark": "#fafafa",  # Gris muy claro
+    "bg_light": "#ffffff",  # Blanco
+    "text_primary": "#212121",  # Gris oscuro
+    "text_secondary": "#757575",  # Gris medio
+    "border": "#e0e0e0",  # Gris borde
+    "hover": "#e3f2fd",  # Azul muy claro para hover
+    "selected": "#bbdefb",  # Azul selección
+}
+
 
 class StudiesAdminView(ttk.Frame):
     """
@@ -51,120 +69,304 @@ class StudiesAdminView(ttk.Frame):
         self.refresh()
 
     def _build(self) -> None:
+        # Configurar tema moderno con ttk.Style
         style = ttk.Style()
 
-        # Encabezados en negrita
-        style.configure("Estudios.Treeview.Heading", font=("Segoe UI", 9, "bold"))
+        # Tema general
+        style.theme_use("clam")
+
+        # ========== CONFIGURACIÓN DE STYLE GLOBAL ==========
+
+        # Frame principal
         style.configure(
-            "Estudios.Treeview",
-            font=("Segoe UI Emoji", 10),  # <-- prueba
-            rowheight=22,
-            background="#ffffff",
-            fieldbackground="#ffffff",
+            "Modern.TFrame", background=COLORS["bg_light"], relief="flat", borderwidth=0
+        )
+
+        # Labels modernos
+        style.configure(
+            "Modern.TLabel",
+            background=COLORS["bg_light"],
+            foreground=COLORS["text_primary"],
+            font=("Segoe UI", 9),
+        )
+
+        style.configure(
+            "ModernTitle.TLabel",
+            background=COLORS["bg_light"],
+            foreground=COLORS["primary"],
+            font=("Segoe UI", 11, "bold"),
+        )
+
+        style.configure(
+            "ModernSubtitle.TLabel",
+            background=COLORS["bg_light"],
+            foreground=COLORS["text_secondary"],
+            font=("Segoe UI", 8),
+        )
+
+        # Combobox moderno
+        style.configure(
+            "Modern.TCombobox",
+            fieldbackground=COLORS["bg_light"],
+            background=COLORS["bg_light"],
+            foreground=COLORS["text_primary"],
+            relief="solid",
+            borderwidth=1,
+            padding=2,
         )
         style.map(
-            "Estudios.Treeview",
-            background=[("selected", "#cce8ff")],
-            foreground=[("selected", "#000000")],
+            "Modern.TCombobox",
+            fieldbackground=[("readonly", COLORS["bg_light"])],
+            foreground=[("readonly", COLORS["text_primary"])],
         )
 
-        # ---- Top bar ----
-        # ---- Top bar (filtros) ----
-        top = ttk.Frame(self)
-        top.pack(fill=tk.X, padx=12, pady=(12, 6))
+        # Entry moderno
+        style.configure(
+            "Modern.TEntry",
+            fieldbackground=COLORS["bg_light"],
+            background=COLORS["bg_light"],
+            foreground=COLORS["text_primary"],
+            relief="solid",
+            borderwidth=1,
+            padding=2,
+        )
 
-        ttk.Label(top, text="Buscar:").pack(side=tk.LEFT)
-        ttk.Entry(top, textvariable=self.filter_q, width=24).pack(side=tk.LEFT, padx=(6, 10))
+        # Buttons modernos - Primario
+        style.configure(
+            "Modern.TButton",
+            background=COLORS["primary"],
+            foreground=COLORS["bg_light"],
+            font=("Segoe UI", 9),
+            relief="flat",
+            padding=6,
+            borderwidth=0,
+        )
+        style.map(
+            "Modern.TButton",
+            background=[("active", COLORS["primary_light"]), ("pressed", COLORS["secondary"])],
+            foreground=[("active", COLORS["bg_light"])],
+        )
 
-        ttk.Label(top, text="Estado:").pack(side=tk.LEFT)
+        # Buttons secundarios
+        style.configure(
+            "ModernSecondary.TButton",
+            background=COLORS["bg_dark"],
+            foreground=COLORS["text_primary"],
+            font=("Segoe UI", 9),
+            relief="solid",
+            borderwidth=1,
+            padding=6,
+        )
+        style.map(
+            "ModernSecondary.TButton",
+            background=[("active", COLORS["border"]), ("pressed", COLORS["text_secondary"])],
+            foreground=[("active", COLORS["text_primary"])],
+        )
+
+        # Checkbutton moderno
+        style.configure(
+            "Modern.TCheckbutton",
+            background=COLORS["bg_light"],
+            foreground=COLORS["text_primary"],
+            font=("Segoe UI", 9),
+        )
+
+        # Treeview moderno
+        style.configure(
+            "Modern.Treeview",
+            background=COLORS["bg_light"],
+            foreground=COLORS["text_primary"],
+            fieldbackground=COLORS["bg_light"],
+            font=("Segoe UI", 9),
+            rowheight=26,
+            relief="none",
+            borderwidth=1,
+        )
+
+        style.configure(
+            "Modern.Treeview.Heading",
+            background=COLORS["primary"],
+            foreground=COLORS["bg_light"],
+            font=("Segoe UI", 9, "bold"),
+            relief="flat",
+            padding=8,
+            borderwidth=0,
+        )
+
+        style.map(
+            "Modern.Treeview",
+            background=[("selected", COLORS["selected"])],
+            foreground=[("selected", COLORS["text_primary"])],
+        )
+
+        style.map(
+            "Modern.Treeview.Heading",
+            background=[("active", COLORS["secondary"])],
+        )
+
+        # ========== CONSTRUCCIÓN DEL LAYOUT ==========
+
+        # Container principal con espaciado
+        container = ttk.Frame(self, style="Modern.TFrame")
+        container.pack(fill=tk.BOTH, expand=True)
+
+        # ---- TOP BAR: FILTROS PRINCIPALES ----
+        filter_frame = ttk.Frame(container, style="Modern.TFrame")
+        filter_frame.pack(fill=tk.X, padx=16, pady=(16, 0))
+
+        # Título de filtros
+        ttk.Label(filter_frame, text="🔍 Filtros de búsqueda", style="ModernTitle.TLabel").pack(
+            side=tk.LEFT, pady=(0, 12)
+        )
+
+        # Frame para organizar los filtros en filas
+        filters_row1 = ttk.Frame(filter_frame, style="Modern.TFrame")
+        filters_row1.pack(fill=tk.X, pady=(0, 10))
+
+        # Búsqueda por paciente
+        ttk.Label(filters_row1, text="Paciente:", style="Modern.TLabel").pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+        ttk.Entry(filters_row1, textvariable=self.filter_q, width=24, style="Modern.TEntry").pack(
+            side=tk.LEFT, padx=(0, 16), fill=tk.X, expand=True
+        )
+
+        # Estado
+        ttk.Label(filters_row1, text="Estado:", style="Modern.TLabel").pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
         ttk.Combobox(
-            top,
+            filters_row1,
             textvariable=self.filter_estado,
             values=["Todos", "ordenado", "enviado", "pagado", "recibido", "entregado"],
-            width=12,
+            width=14,
             state="readonly",
-        ).pack(side=tk.LEFT, padx=(6, 10))
+            style="Modern.TCombobox",
+        ).pack(side=tk.LEFT, padx=(0, 16))
 
-        ttk.Label(top, text="Tipo:").pack(side=tk.LEFT)
+        # Tipo de estudio
+        ttk.Label(filters_row1, text="Tipo:", style="Modern.TLabel").pack(side=tk.LEFT, padx=(0, 6))
         ttk.Combobox(
-            top,
+            filters_row1,
             textvariable=self.filter_tipo,
             values=["Todos", "citologia", "biopsia"],
-            width=12,
+            width=14,
             state="readonly",
-        ).pack(side=tk.LEFT, padx=(6, 10))
+            style="Modern.TCombobox",
+        ).pack(side=tk.LEFT, padx=(0, 16))
 
-        ttk.Label(top, text="Centro:").pack(side=tk.LEFT)
+        # Centro histológico
+        ttk.Label(filters_row1, text="Centro:", style="Modern.TLabel").pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
         self.cbo_center_filter = ttk.Combobox(
-            top,
+            filters_row1,
             textvariable=self.filter_centro,
             values=["Todos", *self._load_center_names()],
             width=28,
             state="readonly",
+            style="Modern.TCombobox",
         )
-        self.cbo_center_filter.pack(side=tk.LEFT, padx=(6, 10))
+        self.cbo_center_filter.pack(side=tk.LEFT, padx=(0, 0), fill=tk.X, expand=True)
 
-        # asignación masiva
-        # self.cbo_center_assign = ttk.Combobox(
-        #    top,
-        #    textvariable=self.assign_centro,
-        #    values=self._load_center_names(),
-        #    width=28,
-        #    state="readonly",
-        # )
-        # self.cbo_center_assign.pack(side=tk.LEFT, padx=(6, 10))
+        # Segunda fila de filtros (fechas)
+        filters_row2 = ttk.Frame(filter_frame, style="Modern.TFrame")
+        filters_row2.pack(fill=tk.X, pady=(0, 10))
 
-        # Fecha por enviado_en
-        ttk.Label(top, text="Enviado desde:").pack(side=tk.LEFT)
-        self.de_from = DateEntry(top, width=11, date_pattern="yyyy-mm-dd")
-        self.de_from.pack(side=tk.LEFT, padx=(6, 10))
+        ttk.Label(filters_row2, text="Enviado desde:", style="Modern.TLabel").pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+        self.de_from = DateEntry(filters_row2, width=11, date_pattern="yyyy-mm-dd")
+        self.de_from.pack(side=tk.LEFT, padx=(0, 16))
 
-        ttk.Label(top, text="hasta:").pack(side=tk.LEFT)
-        self.de_to = DateEntry(top, width=11, date_pattern="yyyy-mm-dd")
-        self.de_to.pack(side=tk.LEFT, padx=(6, 10))
+        ttk.Label(filters_row2, text="hasta:", style="Modern.TLabel").pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+        self.de_to = DateEntry(filters_row2, width=11, date_pattern="yyyy-mm-dd")
+        self.de_to.pack(side=tk.LEFT, padx=(0, 16))
 
         ttk.Checkbutton(
-            top,
+            filters_row2,
             text="Incluir no enviados",
             variable=self.filter_include_not_sent,
-        ).pack(side=tk.LEFT, padx=(6, 10))
+            style="Modern.TCheckbutton",
+        ).pack(side=tk.LEFT, padx=(0, 16))
 
-        ttk.Button(top, text="Aplicar", command=self.refresh).pack(side=tk.LEFT)
-        ttk.Button(top, text="Limpiar filtros", command=self._reset_filters).pack(
-            side=tk.LEFT, padx=8
-        )
-
-        bulk = ttk.Frame(self)
-        bulk.pack(fill=tk.X, padx=12, pady=(0, 10))
-
-        ttk.Label(bulk, text="Acciones masivas:").pack(side=tk.LEFT)
-
-        ttk.Label(bulk, text="Centro a asignar:").pack(side=tk.LEFT, padx=(12, 0))
-
-        self.cbo_center_assign = ttk.Combobox(
-            bulk,
-            textvariable=self.assign_centro,
-            values=self._load_center_names(),  # aquí NO va "Todos"
-            width=32,
-            state="readonly",
-        )
-        self.cbo_center_assign.pack(side=tk.LEFT, padx=(6, 10))
+        # Botones de acción para filtros
+        ttk.Button(
+            filters_row2, text="✓ Aplicar", command=self.refresh, style="Modern.TButton"
+        ).pack(side=tk.LEFT, padx=(0, 8))
 
         ttk.Button(
-            bulk,
-            text="Asignar a seleccionados",
-            command=self.assign_center_bulk,
+            filters_row2,
+            text="⟲ Limpiar",
+            command=self._reset_filters,
+            style="ModernSecondary.TButton",
         ).pack(side=tk.LEFT)
 
-        ttk.Button(
-            bulk,
-            text="Limpiar selección",
-            command=self._clear_selection,
-        ).pack(side=tk.LEFT, padx=8)
+        # ---- ACCIONES MASIVAS ----
+        bulk_frame = ttk.Frame(container, style="Modern.TFrame")
+        bulk_frame.pack(fill=tk.X, padx=16, pady=(16, 0))
 
-        # ---- Table ----
-        frame = ttk.Frame(self)
-        frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
+        ttk.Label(bulk_frame, text="⚙ Acciones masivas", style="ModernTitle.TLabel").pack(
+            side=tk.LEFT, pady=(0, 12)
+        )
+
+        bulk_controls = ttk.Frame(bulk_frame, style="Modern.TFrame")
+        bulk_controls.pack(fill=tk.X, pady=(0, 12))
+
+        ttk.Label(bulk_controls, text="Centro a asignar:", style="Modern.TLabel").pack(
+            side=tk.LEFT, padx=(0, 6)
+        )
+
+        self.cbo_center_assign = ttk.Combobox(
+            bulk_controls,
+            textvariable=self.assign_centro,
+            values=self._load_center_names(),
+            width=32,
+            state="readonly",
+            style="Modern.TCombobox",
+        )
+        self.cbo_center_assign.pack(side=tk.LEFT, padx=(0, 12), fill=tk.X, expand=True)
+
+        ttk.Button(
+            bulk_controls,
+            text="📌 Asignar a seleccionados",
+            command=self.assign_center_bulk,
+            style="Modern.TButton",
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        ttk.Button(
+            bulk_controls,
+            text="✕ Limpiar selección",
+            command=self._clear_selection,
+            style="ModernSecondary.TButton",
+        ).pack(side=tk.LEFT)
+
+        # ---- TABLE FRAME ----
+        table_frame = ttk.Frame(container, style="Modern.TFrame")
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=(16, 16))
+
+        # Información sobre la tabla
+        info_frame = ttk.Frame(table_frame, style="Modern.TFrame")
+        info_frame.pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Label(info_frame, text="📋 Listado de estudios", style="ModernTitle.TLabel").pack(
+            side=tk.LEFT
+        )
+
+        ttk.Label(
+            info_frame,
+            text="Haz clic en los estados para cambiarlos. Doble clic para editar resultado.",
+            style="ModernSubtitle.TLabel",
+        ).pack(side=tk.LEFT, padx=(12, 0))
+
+        # Scrollbars para la tabla
+        tree_scroll_frame = ttk.Frame(table_frame, style="Modern.TFrame")
+        tree_scroll_frame.pack(fill=tk.BOTH, expand=True)
+
+        vsb = ttk.Scrollbar(tree_scroll_frame, orient=tk.VERTICAL)
+        hsb = ttk.Scrollbar(tree_scroll_frame, orient=tk.HORIZONTAL)
 
         cols = (
             "cedula",
@@ -180,13 +382,18 @@ class StudiesAdminView(ttk.Frame):
         )
 
         self.tree = ttk.Treeview(
-            frame,
+            tree_scroll_frame,
             columns=cols,
             show="headings",
-            style="Estudios.Treeview",
+            style="Modern.Treeview",
             height=20,
             selectmode="extended",
+            yscrollcommand=vsb.set,
+            xscrollcommand=hsb.set,
         )
+
+        vsb.config(command=self.tree.yview)
+        hsb.config(command=self.tree.xview)
 
         headings = [
             ("cedula", "Cédula", 110),
@@ -200,15 +407,36 @@ class StudiesAdminView(ttk.Frame):
             ("recibido", "Recibido", 90),
             ("entregado", "Entregado", 90),
         ]
+
         for c, t, w in headings:
             self.tree.heading(c, text=t, anchor="w")
             self.tree.column(c, width=w, anchor="w")
 
-        self.tree.pack(fill=tk.BOTH, expand=True)
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+        tree_scroll_frame.grid_rowconfigure(0, weight=1)
+        tree_scroll_frame.grid_columnconfigure(0, weight=1)
 
-        # Zebra striping
-        self.tree.tag_configure("even", background="#ffffff")
-        self.tree.tag_configure("odd", background="#f3f3f3")
+        # Zebra striping mejorado
+        self.tree.tag_configure(
+            "even", background=COLORS["bg_light"], foreground=COLORS["text_primary"]
+        )
+        self.tree.tag_configure(
+            "odd", background=COLORS["bg_dark"], foreground=COLORS["text_primary"]
+        )
+
+        # Tags para estados especiales
+        self.tree.tag_configure(
+            "marked",
+            background="#c8e6c9",  # Verde muy claro
+            foreground=COLORS["text_primary"],
+        )
+        self.tree.tag_configure(
+            "pending",
+            background="#fff9c4",  # Amarillo muy claro
+            foreground=COLORS["text_primary"],
+        )
 
         # Click handlers
         self.tree.bind("<Button-1>", self._on_click, add=False)
