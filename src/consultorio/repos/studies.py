@@ -263,21 +263,39 @@ class StudyRepo:
         estado: str = "Todos",
         tipo: str = "Todos",
         centro_id: int | None = None,
-        date_from: str | None = None,  # "YYYY-MM-DD"
-        date_to: str | None = None,  # "YYYY-MM-DD"
+        enviado_from: str | None = None,  # "YYYY-MM-DD"
+        enviado_to: str | None = None,  # "YYYY-MM-DD"
+        include_not_sent: bool = True,
         limit: int = 1500,
     ) -> list[sqlite3.Row]:
         where: list[str] = []
         params: list[object] = []
 
-        # Rango por ordenado_en (date(...) compara por día)
-        if date_from:
-            where.append("date(e.ordenado_en) >= date(?)")
-            params.append(date_from)
-        if date_to:
-            where.append("date(e.ordenado_en) <= date(?)")
-            params.append(date_to)
+        # --- filtro por rango de enviado_en ---
+        if enviado_from or enviado_to:
+            if include_not_sent:
+                parts: list[str] = []
+                if enviado_from:
+                    parts.append("date(e.enviado_en) >= date(?)")
+                    params.append(enviado_from)
+                if enviado_to:
+                    parts.append("date(e.enviado_en) <= date(?)")
+                    params.append(enviado_to)
 
+                if parts:
+                    where.append("(e.enviado_en IS NULL OR (" + " AND ".join(parts) + "))")
+                else:
+                    where.append("e.enviado_en IS NULL")
+            else:
+                where.append("e.enviado_en IS NOT NULL")
+                if enviado_from:
+                    where.append("date(e.enviado_en) >= date(?)")
+                    params.append(enviado_from)
+                if enviado_to:
+                    where.append("date(e.enviado_en) <= date(?)")
+                    params.append(enviado_to)
+
+        # --- otros filtros ---
         if estado and estado != "Todos":
             where.append("e.estado_actual = ?")
             params.append(estado)

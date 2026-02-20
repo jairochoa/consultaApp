@@ -79,6 +79,9 @@ _SCHEMA: list[str] = [
     """CREATE INDEX IF NOT EXISTS idx_estudios_estado_actual ON estudios(estado_actual);""",
     """CREATE INDEX IF NOT EXISTS idx_estudios_paciente ON estudios(paciente_id);""",
     """CREATE INDEX IF NOT EXISTS idx_estudios_cita ON estudios(cita_id);""",
+    """CREATE INDEX IF NOT EXISTS idx_estudios_enviado_en ON estudios(enviado_en);""",
+    """CREATE INDEX IF NOT EXISTS idx_estudios_centro_id ON estudios(centro_id);""",
+    """CREATE INDEX IF NOT EXISTS idx_estudios_tipo ON estudios(tipo);""",
 ]
 
 
