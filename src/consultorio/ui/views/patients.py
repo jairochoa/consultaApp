@@ -71,6 +71,7 @@ class PatientsView(ttk.Frame):
         self.fnac = tk.StringVar()
         self.cedula = tk.StringVar()
         self.telefono = tk.StringVar()
+        self.fecha_registro = tk.StringVar(value="")
 
         # Entradas
 
@@ -163,15 +164,24 @@ class PatientsView(ttk.Frame):
         pan.add(bottom_box, weight=2)
 
         # --- Tree Pacientes (altura reducida) ---
-        cols = ("cedula", "apellidos", "nombres", "telefono")
+        cols = ("nombres", "apellidos", "comentario", "edad", "cedula", "telefono", "registro")
+
         self.tree = ttk.Treeview(
-            patients_box, columns=cols, show="headings", height=9, style="Pacientes.Treeview"
+            patients_box,
+            columns=cols,
+            show="headings",
+            height=9,
+            style="Pacientes.Treeview",
         )
+
         for c, t, w in [
-            ("cedula", "Cédula", 120),
-            ("apellidos", "Apellidos", 200),
-            ("nombres", "Nombres", 200),
-            ("telefono", "Teléfono", 150),
+            ("nombres", "Nombres", 150),
+            ("apellidos", "Apellidos", 150),
+            ("comentario", "Comentario", 200),
+            ("edad", "Edad", 55),
+            ("cedula", "Cédula", 110),
+            ("telefono", "Teléfono", 120),
+            ("registro", "Registro", 150),
         ]:
             self.tree.heading(c, text=t, anchor="w")
             self.tree.column(c, width=w, anchor="w")
@@ -237,7 +247,15 @@ class PatientsView(ttk.Frame):
                 "",
                 "end",
                 iid=str(r["paciente_id"]),
-                values=(r["cedula"], r["apellidos"], r["nombres"], r["telefono"] or ""),
+                values=(
+                    r["nombres"] or "",
+                    r["apellidos"] or "",
+                    (r["comentario"] or ""),
+                    str(r["edad"] or ""),
+                    r["cedula"] or "",
+                    r["telefono"] or "",
+                    (r["creado_en"] or ""),  # yyyy-mm-dd hh:mm
+                ),
             )
 
         # restaurar selección si todavía existe

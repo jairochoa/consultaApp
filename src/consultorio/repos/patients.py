@@ -31,19 +31,53 @@ class PatientRepo:
 
     def search(self, q: str) -> list[sqlite3.Row]:
         q = (q or "").strip()
+
+        edad_sql = """
+        CASE
+        WHEN fecha_nacimiento IS NULL OR trim(fecha_nacimiento) = '' THEN NULL
+        WHEN length(trim(fecha_nacimiento)) != 10 THEN NULL
+        WHEN substr(fecha_nacimiento, 3, 1) != '-' OR substr(fecha_nacimiento, 6, 1) != '-' THEN NULL
+        ELSE
+            (
+            CAST(strftime('%Y','now') AS INT) - CAST(substr(fecha_nacimiento, 7, 4) AS INT)
+            - (
+                strftime('%m-%d','now')
+                < (substr(fecha_nacimiento, 4, 2) || '-' || substr(fecha_nacimiento, 1, 2))
+                )
+            )
+        END AS edad
+        """
+
         if not q:
             return self.conn.execute(
-                """
-                SELECT paciente_id, cedula, apellidos, nombres, telefono
+                f"""
+                SELECT
+                paciente_id,
+                nombres,
+                apellidos,
+                comentario,
+                {edad_sql},
+                cedula,                
+                telefono,
+                creado_en
                 FROM pacientes
                 ORDER BY apellidos, nombres
                 LIMIT 200
                 """
             ).fetchall()
+
         like = f"%{q}%"
         return self.conn.execute(
-            """
-            SELECT paciente_id, cedula, apellidos, nombres, telefono
+            f"""
+            SELECT
+            paciente_id,
+            nombres,
+            apellidos,
+            comentario,
+            {edad_sql},
+            cedula,                
+            telefono,
+            creado_en
             FROM pacientes
             WHERE cedula LIKE ? OR apellidos LIKE ? OR nombres LIKE ?
             ORDER BY apellidos, nombres
