@@ -13,11 +13,10 @@ from consultorio.ui.widgets.common import error, info, warn
 
 
 class NewVisitWindow(tk.Toplevel):
-    def __init__(
-        self, master: tk.Misc, conn: sqlite3.Connection, *, paciente_id: int, bus: EventBus
-    ):
+    def __init__(self, master, conn, paciente_id: int, *, bus, cita_id: int | None = None):
         super().__init__(master)
         self.conn = conn
+        self.cita_id = cita_id
         self.studies = StudyRepo(conn)
         self.paciente_id = paciente_id
         self.cfg = load_config()
@@ -99,9 +98,8 @@ class NewVisitWindow(tk.Toplevel):
         ttk.Label(frm, text="FUM (YYYY-MM-DD):", style="Field.TLabel").grid(
             row=r, column=0, sticky="w"
         )
-        ttk.Entry(frm, textvariable=self.fum, width=18).grid(
-            row=r, column=1, sticky="w", padx=(6, 18)
-        )
+        self.ent_fum = ttk.Entry(frm, textvariable=self.fum, width=18)
+        self.ent_fum.grid(row=r, column=1, sticky="w", padx=(6, 18))
 
         ttk.Label(frm, text="Forma de pago:", style="Field.TLabel").grid(
             row=r, column=2, sticky="w"
@@ -216,13 +214,14 @@ class NewVisitWindow(tk.Toplevel):
 
         box_c = ttk.Frame(frm)
         box_c.grid(row=r, column=0, columnspan=4, sticky="w")
-        ttk.Checkbutton(box_c, text="Citología PAP", variable=self.var_pap).pack(
-            side=tk.LEFT, padx=(0, 12)
-        )
-        ttk.Checkbutton(box_c, text="Citología MD", variable=self.var_md).pack(
-            side=tk.LEFT, padx=(0, 12)
-        )
-        ttk.Checkbutton(box_c, text="Citología MI", variable=self.var_mi).pack(side=tk.LEFT)
+        self.chk_pap = ttk.Checkbutton(box_c, text="Citología PAP", variable=self.var_pap)
+        self.chk_pap.pack(side=tk.LEFT, padx=(0, 12))
+
+        self.chk_md = ttk.Checkbutton(box_c, text="Citología MD", variable=self.var_md)
+        self.chk_md.pack(side=tk.LEFT, padx=(0, 12))
+
+        self.chk_mi = ttk.Checkbutton(box_c, text="Citología MI", variable=self.var_mi)
+        self.chk_mi.pack(side=tk.LEFT)
         r += 1
 
         ttk.Label(frm, text="Biopsia:", style="Field.TLabel").grid(
@@ -240,9 +239,10 @@ class NewVisitWindow(tk.Toplevel):
             "Cono",
             "Otro",
         ]
-        ttk.Combobox(
+        self.cbo_biopsia = ttk.Combobox(
             frm, textvariable=self.biopsia, values=biopsias, state="readonly", width=26
-        ).grid(row=r, column=1, sticky="w", padx=(6, 0), pady=(10, 0))
+        )
+        self.cbo_biopsia.grid(row=r, column=1, sticky="w", padx=(6, 0), pady=(10, 0))
         r += 1
 
         # Botones
@@ -250,6 +250,12 @@ class NewVisitWindow(tk.Toplevel):
         btns.grid(row=r, column=0, columnspan=4, sticky="e", pady=(16, 0))
         ttk.Button(btns, text="Guardar", command=self.save).pack(side=tk.LEFT)
         ttk.Button(btns, text="Cancelar", command=self.destroy).pack(side=tk.LEFT, padx=8)
+
+        if self.cita_id is not None:
+            self._load_for_edit(self.cita_id)
+            self.ent_fum.configure(state="disabled")
+            for w in (self.chk_pap, self.chk_md, self.chk_mi, self.cbo_biopsia):
+                w.configure(state="disabled")
 
     def _to_int(self, v: str, *, default: int = 0) -> int:
         s = (v or "").strip()
@@ -263,6 +269,52 @@ class NewVisitWindow(tk.Toplevel):
     def save(self) -> None:
         try:
             validate_forma_pago(self.cfg, self.forma_pago.get().strip())
+
+            # ========= EDITAR =========
+            if self.cita_id is not None:
+                self.conn.execute(
+                    """
+                    UPDATE citas
+                    SET g_p=?, g_c=?, g_a=?, g_ee=?, g_otros=?,
+                        anticoncepcion=?,
+                        motivo_consulta=?,
+                        examen_fisico=?,
+                        colposcopia=?,
+                        eco_vaginal=?,
+                        eco_mamas=?,
+                        otros_paraclinicos=?,
+                        diagnostico=?,
+                        plan=?,
+                        forma_pago=?,
+                        actualizado_en=datetime('now')
+                    WHERE cita_id=?
+                    """,
+                    (
+                        self._to_int(self.g_p.get()),
+                        self._to_int(self.g_c.get()),
+                        self._to_int(self.g_a.get()),
+                        self._to_int(self.g_ee.get()),
+                        self._to_int(self.g_otros.get()),
+                        self.txt_anticoncepcion.get("1.0", tk.END).strip(),
+                        self.motivo.get("1.0", tk.END).strip(),
+                        self.txt_examen_fisico.get("1.0", tk.END).strip(),
+                        self.txt_colposcopia.get("1.0", tk.END).strip(),
+                        self.txt_eco_vaginal.get("1.0", tk.END).strip(),
+                        self.txt_eco_mamas.get("1.0", tk.END).strip(),
+                        self.txt_otros_para.get("1.0", tk.END).strip(),
+                        self.txt_diagnostico.get("1.0", tk.END).strip(),
+                        self.txt_plan.get("1.0", tk.END).strip(),
+                        self.forma_pago.get().strip(),
+                        self.cita_id,
+                    ),
+                )
+                self.conn.commit()
+
+                self.bus.publish("visits")
+                info(f"Cita actualizada (ID: {self.cita_id}).")
+                self.destroy()
+                return
+            # ========= FIN EDITAR =========
 
             v = VisitCreate(
                 paciente_id=self.paciente_id,
@@ -333,3 +385,65 @@ class NewVisitWindow(tk.Toplevel):
             warn(str(e))
         except Exception as e:
             error(str(e))
+
+    def _load_for_edit(self, cita_id: int) -> None:
+        row = self.conn.execute(
+            """
+            SELECT fum, g_p, g_c, g_a, g_ee, g_otros,
+                anticoncepcion, motivo_consulta, examen_fisico, colposcopia,
+                eco_vaginal, eco_mamas, otros_paraclinicos, diagnostico, plan,
+                forma_pago
+            FROM citas
+            WHERE cita_id=?
+            """,
+            (cita_id,),
+        ).fetchone()
+        if not row:
+            warn("No se encontró la cita.")
+            return
+
+        # entries vars
+        self.fum.set(row["fum"] or "")
+        self.g_p.set(str(row["g_p"] or 0))
+        self.g_c.set(str(row["g_c"] or 0))
+        self.g_a.set(str(row["g_a"] or 0))
+        self.g_ee.set(str(row["g_ee"] or 0))
+        self.g_otros.set(str(row["g_otros"] or 0))
+        self.forma_pago.set(row["forma_pago"] or "")
+
+        # textareas (ajusta a tus nombres reales)
+        def set_text(txt: tk.Text, val: str | None) -> None:
+            txt.delete("1.0", tk.END)
+            txt.insert("1.0", val or "")
+
+        set_text(self.txt_anticoncepcion, row["anticoncepcion"])
+        set_text(self.motivo, row["motivo_consulta"])
+        set_text(self.txt_examen_fisico, row["examen_fisico"])
+        set_text(self.txt_colposcopia, row["colposcopia"])
+        set_text(self.txt_eco_vaginal, row["eco_vaginal"])
+        set_text(self.txt_eco_mamas, row["eco_mamas"])
+        set_text(self.txt_otros_para, row["otros_paraclinicos"])
+        set_text(self.txt_diagnostico, row["diagnostico"])
+        set_text(self.txt_plan, row["plan"])
+
+        rows = self.conn.execute(
+            "SELECT tipo, subtipo FROM estudios WHERE cita_id=?",
+            (cita_id,),
+        ).fetchall()
+
+        # reset
+        self.var_pap.set(False)
+        self.var_md.set(False)
+        self.var_mi.set(False)
+        self.biopsia.set("Ninguna")
+
+        for r in rows:
+            if r["tipo"] == "citologia":
+                if r["subtipo"] == "PAP":
+                    self.var_pap.set(True)
+                elif r["subtipo"] == "MD":
+                    self.var_md.set(True)
+                elif r["subtipo"] == "MI":
+                    self.var_mi.set(True)
+            elif r["tipo"] == "biopsia":
+                self.biopsia.set(r["subtipo"] or "Ninguna")

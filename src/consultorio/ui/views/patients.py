@@ -197,6 +197,7 @@ class PatientsView(ttk.Frame):
 
         cols_h = ("fecha", "motivo", "pago")
         self.tree_hist = ttk.Treeview(hist, columns=cols_h, show="headings", height=6)
+        self.tree_hist.bind("<Double-1>", self.open_visit_from_history)
         for c, t, w in [
             ("fecha", "Fecha", 170),
             ("motivo", "Motivo", 520),
@@ -277,8 +278,6 @@ class PatientsView(ttk.Frame):
             self.tree_hist.delete(i)
 
     def _load_hist(self, paciente_id: int) -> None:
-        if not hasattr(self, "tree_hist") or not self.tree_hist.winfo_exists():
-            return
         self._clear_hist()
         rows = self.visits.list_for_patient(paciente_id)
         for idx, r in enumerate(rows):
@@ -286,6 +285,7 @@ class PatientsView(ttk.Frame):
             self.tree_hist.insert(
                 "",
                 "end",
+                iid=str(r["cita_id"]),   # 👈 clave
                 tags=(tag,),
                 values=(r["fecha_consulta"], (r["motivo_consulta"] or "")[:120], r["forma_pago"]),
             )
@@ -776,3 +776,28 @@ class PatientsView(ttk.Frame):
             return
         self._update_age()
         self.after(60_000, self._tick_age)
+
+    def open_visit_from_history(self, _evt: object = None) -> None:
+        sel = self.tree_hist.selection()
+        if not sel:
+            return
+        try:
+            cita_id = int(sel[0])  # porque iid = cita_id
+        except ValueError:
+            warn("Selección inválida.")
+            return
+
+        # Abrir ventana en modo edición
+        win = NewVisitWindow(
+            self,
+            self.conn,
+            paciente_id=self.selected_id,   # opcional, por si tu ventana lo usa
+            cita_id=cita_id,               # 👈 nuevo
+            bus=self.bus,
+        )
+        self.wait_window(win)
+
+        # refrescar panels del paciente seleccionado
+        if self.selected_id is not None:
+            self._load_hist(self.selected_id)
+            self._load_studies(self.selected_id)
