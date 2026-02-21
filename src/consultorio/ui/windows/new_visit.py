@@ -25,39 +25,87 @@ class NewVisitWindow(tk.Toplevel):
         self.crud = VisitCrud(conn)
 
         self.title("Nueva cita")
-        self.geometry("760x520")
-        self.resizable(False, False)
+        self.geometry("980x820")
+        self.resizable(True, True)
 
         self._build()
 
     def _build(self) -> None:
-        frm = ttk.Frame(self)
-        frm.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+        style = ttk.Style()
+        style.configure("Field.TLabel", font=("Segoe UI", 9, "bold"), foreground="#0b2d5c")
 
+        # Ventana más usable
+        self.geometry("980x820")
+        self.resizable(True, True)
+
+        # --- Scrollable container ---
+        container = ttk.Frame(self)
+        container.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
+
+        canvas = tk.Canvas(container, highlightthickness=0)
+        vsb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+
+        vsb.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        frm = ttk.Frame(canvas)
+        win_id = canvas.create_window((0, 0), window=frm, anchor="nw")
+
+        def _on_frame_configure(_e: object) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _on_canvas_configure(e: tk.Event) -> None:
+            canvas.itemconfigure(win_id, width=e.width)
+
+        frm.bind("<Configure>", _on_frame_configure)
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        # Mousewheel (Windows)
+        def _on_mousewheel(e: tk.Event) -> None:
+            canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+        # --- Vars ---
         self.fum = tk.StringVar()
         self.g_p = tk.StringVar(value="0")
         self.g_c = tk.StringVar(value="0")
         self.g_a = tk.StringVar(value="0")
         self.g_ee = tk.StringVar(value="0")
         self.g_otros = tk.StringVar(value="0")
-        self.anticoncepcion = tk.StringVar()
 
+        self.anticoncepcion = tk.StringVar()  # (lo dejamos aunque ahora es Text)
         default_pay = (
             self.cfg.clinic.payment_methods[0] if self.cfg.clinic.payment_methods else "efectivo"
         )
         self.forma_pago = tk.StringVar(value=default_pay)
 
+        # =========================
+        # GRID CONFIG
+        # =========================
+        frm.grid_columnconfigure(0, weight=0)  # label
+        frm.grid_columnconfigure(1, weight=1)  # widget
+        frm.grid_columnconfigure(2, weight=0)  # label
+        frm.grid_columnconfigure(3, weight=1)  # widget
+
         r = 0
-        ttk.Label(frm, text=f"Paciente ID: {self.paciente_id}").grid(
+        ttk.Label(frm, text=f"Paciente ID: {self.paciente_id}", style="Field.TLabel").grid(
             row=r, column=0, columnspan=4, sticky="w", pady=(0, 10)
         )
         r += 1
 
-        ttk.Label(frm, text="FUM (YYYY-MM-DD):").grid(row=r, column=0, sticky="w")
+        # FUM + pago en la misma fila (2 columnas)
+        ttk.Label(frm, text="FUM (YYYY-MM-DD):", style="Field.TLabel").grid(
+            row=r, column=0, sticky="w"
+        )
         ttk.Entry(frm, textvariable=self.fum, width=18).grid(
             row=r, column=1, sticky="w", padx=(6, 18)
         )
-        ttk.Label(frm, text="Forma de pago:").grid(row=r, column=2, sticky="w")
+
+        ttk.Label(frm, text="Forma de pago:", style="Field.TLabel").grid(
+            row=r, column=2, sticky="w"
+        )
         ttk.Combobox(
             frm,
             textvariable=self.forma_pago,
@@ -67,42 +115,101 @@ class NewVisitWindow(tk.Toplevel):
         ).grid(row=r, column=3, sticky="w", padx=(6, 0))
         r += 1
 
-        ttk.Label(frm, text="Gestas (P/C/A/EE/Otros):").grid(
+        # =========================
+        # GESTAS (ordenado con lista/matriz)
+        # =========================
+        ttk.Label(frm, text="Gestas:", style="Field.TLabel").grid(
             row=r, column=0, sticky="w", pady=(10, 0)
         )
+        gestas_box = ttk.Frame(frm)
+        gestas_box.grid(row=r, column=1, columnspan=3, sticky="w", pady=(10, 0))
+
+        # Matriz ordenada: (label, var)
+        gestas = [
+            ("P", self.g_p),
+            ("C", self.g_c),
+            ("A", self.g_a),
+            ("EE", self.g_ee),
+            ("Otros", self.g_otros),
+        ]
+
+        # Se dibuja en una sola fila, ordenado y compacto
+        for i, (lbl, var) in enumerate(gestas):
+            ttk.Label(gestas_box, text=f"{lbl}:", style="Field.TLabel").grid(
+                row=0, column=i * 2, sticky="e"
+            )
+            ttk.Entry(gestas_box, textvariable=var, width=6).grid(
+                row=0, column=i * 2 + 1, sticky="w", padx=(6, 14)
+            )
         r += 1
 
-        def gbox(lbl: str, var: tk.StringVar, col: int) -> None:
-            ttk.Label(frm, text=lbl).grid(row=r, column=col, sticky="w")
-            ttk.Entry(frm, textvariable=var, width=6).grid(row=r + 1, column=col, sticky="w")
+        # =========================
+        # Helper: textarea compacto para 2 columnas
+        # =========================
+        def add_textarea_2col(
+            row: int,
+            col_label: int,
+            label: str,
+            height: int = 4,
+        ) -> tk.Text:
+            ttk.Label(frm, text=label, style="Field.TLabel").grid(
+                row=row, column=col_label, sticky="w", pady=(10, 0)
+            )
+            box = ttk.Frame(frm)
+            box.grid(
+                row=row + 1,
+                column=col_label,
+                columnspan=2,
+                sticky="nsew",
+                padx=(0, 12 if col_label == 0 else 0),
+            )
 
-        gbox("P", self.g_p, 0)
-        gbox("C", self.g_c, 1)
-        gbox("A", self.g_a, 2)
-        gbox("EE", self.g_ee, 3)
+            t = tk.Text(box, height=height, wrap="word")
+            t.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+            sb = ttk.Scrollbar(box, orient="vertical", command=t.yview)
+            sb.pack(side=tk.RIGHT, fill=tk.Y)
+            t.configure(yscrollcommand=sb.set)
+            return t
+
+        # =========================
+        # TEXTAREAS EN 2 COLUMNAS (cada fila con 2)
+        # =========================
+        # Fila 1: Anticoncepción | Motivo
+        self.txt_anticoncepcion = add_textarea_2col(r, 0, "Anticoncepción:", height=4)
+        self.motivo = add_textarea_2col(r, 2, "Motivo de consulta:", height=4)
         r += 2
 
-        ttk.Label(frm, text="Otros:").grid(row=r, column=0, sticky="w", pady=(6, 0))
-        ttk.Entry(frm, textvariable=self.g_otros, width=6).grid(row=r, column=1, sticky="w")
-        r += 1
+        # Fila 2: Examen físico | Colposcopia
+        self.txt_examen_fisico = add_textarea_2col(r, 0, "Examen físico:", height=5)
+        self.txt_colposcopia = add_textarea_2col(r, 2, "Colposcopia:", height=5)
+        r += 2
 
-        ttk.Label(frm, text="Anticoncepción:").grid(row=r, column=0, sticky="w", pady=(10, 0))
-        ttk.Entry(frm, textvariable=self.anticoncepcion, width=46).grid(
-            row=r, column=1, columnspan=3, sticky="w"
+        # Fila 3: Eco vaginal | Eco mamas
+        self.txt_eco_vaginal = add_textarea_2col(r, 0, "Ecografía vaginal:", height=5)
+        self.txt_eco_mamas = add_textarea_2col(r, 2, "Ecografía de mamas:", height=5)
+        r += 2
+
+        # Fila 4: Otros paraclínicos | Diagnóstico
+        self.txt_otros_para = add_textarea_2col(r, 0, "Otros paraclínicos:", height=5)
+        self.txt_diagnostico = add_textarea_2col(r, 2, "Diagnóstico:", height=5)
+        r += 2
+
+        # Fila 5: Plan (izquierda) | (vacío derecha)
+        self.txt_plan = add_textarea_2col(r, 0, "Plan:", height=5)
+        # placeholder derecha (no hace nada, solo mantiene grilla alineada)
+        ttk.Label(frm, text=" ", style="Field.TLabel").grid(row=r, column=2, sticky="w")
+        ttk.Label(frm, text=" ").grid(row=r + 1, column=2, columnspan=2, sticky="nsew")
+        r += 2
+
+        # =========================
+        # Estudios a ordenar (mantener simple)
+        # =========================
+        ttk.Label(frm, text="Estudios a ordenar:", style="Field.TLabel").grid(
+            row=r, column=0, sticky="w", pady=(14, 0)
         )
         r += 1
 
-        ttk.Label(frm, text="Motivo de consulta:").grid(row=r, column=0, sticky="w", pady=(10, 0))
-        r += 1
-        self.motivo = tk.Text(frm, height=4, width=80)
-        self.motivo.grid(row=r, column=0, columnspan=4, sticky="w")
-        r += 1
-
-        # --- Estudios a ordenar ---
-        ttk.Label(frm, text="Estudios a ordenar:").grid(row=r, column=0, sticky="w", pady=(14, 0))
-        r += 1
-
-        # Citologías (máximo 3)
         self.var_pap = tk.BooleanVar(value=False)
         self.var_md = tk.BooleanVar(value=False)
         self.var_mi = tk.BooleanVar(value=False)
@@ -118,8 +225,9 @@ class NewVisitWindow(tk.Toplevel):
         ttk.Checkbutton(box_c, text="Citología MI", variable=self.var_mi).pack(side=tk.LEFT)
         r += 1
 
-        # Biopsia (una)
-        ttk.Label(frm, text="Biopsia:").grid(row=r, column=0, sticky="w", pady=(10, 0))
+        ttk.Label(frm, text="Biopsia:", style="Field.TLabel").grid(
+            row=r, column=0, sticky="w", pady=(10, 0)
+        )
         self.biopsia = tk.StringVar(value="Ninguna")
         biopsias = [
             "Ninguna",
@@ -134,20 +242,23 @@ class NewVisitWindow(tk.Toplevel):
         ]
         ttk.Combobox(
             frm, textvariable=self.biopsia, values=biopsias, state="readonly", width=26
-        ).grid(row=r, column=1, sticky="w", padx=(6, 0))
+        ).grid(row=r, column=1, sticky="w", padx=(6, 0), pady=(10, 0))
+        r += 1
 
+        # Botones
         btns = ttk.Frame(frm)
-        btns.grid(row=r, column=0, columnspan=4, sticky="e", pady=(14, 0))
+        btns.grid(row=r, column=0, columnspan=4, sticky="e", pady=(16, 0))
         ttk.Button(btns, text="Guardar", command=self.save).pack(side=tk.LEFT)
         ttk.Button(btns, text="Cancelar", command=self.destroy).pack(side=tk.LEFT, padx=8)
 
-    def _to_int(self, s: str) -> int:
-        s = (s or "").strip()
+    def _to_int(self, v: str, *, default: int = 0) -> int:
+        s = (v or "").strip()
         if not s:
-            return 0
-        if not s.isdigit():
-            raise DomainError("Los campos de gestas deben ser numéricos.")
-        return int(s)
+            return default
+        try:
+            return int(s)
+        except ValueError:
+            return default
 
     def save(self) -> None:
         try:
@@ -161,8 +272,15 @@ class NewVisitWindow(tk.Toplevel):
                 g_a=self._to_int(self.g_a.get()),
                 g_ee=self._to_int(self.g_ee.get()),
                 g_otros=self._to_int(self.g_otros.get()),
-                anticoncepcion=self.anticoncepcion.get().strip(),
+                anticoncepcion=self.txt_anticoncepcion.get("1.0", tk.END).strip(),
                 motivo_consulta=self.motivo.get("1.0", tk.END).strip(),
+                examen_fisico=self.txt_examen_fisico.get("1.0", tk.END).strip(),
+                colposcopia=self.txt_colposcopia.get("1.0", tk.END).strip(),
+                eco_vaginal=self.txt_eco_vaginal.get("1.0", tk.END).strip(),
+                eco_mamas=self.txt_eco_mamas.get("1.0", tk.END).strip(),
+                otros_paraclinicos=self.txt_otros_para.get("1.0", tk.END).strip(),
+                diagnostico=self.txt_diagnostico.get("1.0", tk.END).strip(),
+                plan=self.txt_plan.get("1.0", tk.END).strip(),
                 forma_pago=self.forma_pago.get().strip(),
             )
             cita_id = self.crud.create(v)

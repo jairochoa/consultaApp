@@ -45,8 +45,6 @@ class VisitRepo:
             (s, e),
         ).fetchall()
 
-
-
     def list_for_patient(self, paciente_id: int) -> list[sqlite3.Row]:
         return self.conn.execute(
             """SELECT cita_id, fecha_consulta, motivo_consulta, diagnostico, plan, forma_pago

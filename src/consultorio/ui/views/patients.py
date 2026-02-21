@@ -271,10 +271,14 @@ class PatientsView(ttk.Frame):
     # ---------------- Historial ----------------
 
     def _clear_hist(self) -> None:
+        if not hasattr(self, "tree_hist") or not self.tree_hist.winfo_exists():
+            return
         for i in self.tree_hist.get_children():
             self.tree_hist.delete(i)
 
     def _load_hist(self, paciente_id: int) -> None:
+        if not hasattr(self, "tree_hist") or not self.tree_hist.winfo_exists():
+            return
         self._clear_hist()
         rows = self.visits.list_for_patient(paciente_id)
         for idx, r in enumerate(rows):
@@ -481,9 +485,10 @@ class PatientsView(ttk.Frame):
         win = NewVisitWindow(self, self.conn, paciente_id=self.selected_id, bus=self.bus)
         self.wait_window(win)
 
-        # redundante, pero útil por si algo falla
-        self._load_hist(self.selected_id)
-        self._load_studies(self.selected_id)
+        if not self.winfo_exists():
+            return
+
+        self.after(0, self._refresh_selected_patient_panels)
 
     def _add_placeholder(self, entry: ttk.Entry, placeholder: str) -> None:
         # Guardar placeholder en el widget (1 vez)
