@@ -42,6 +42,7 @@ class NewVisitWindow(tk.Toplevel):
         container.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
 
         canvas = tk.Canvas(container, highlightthickness=0)
+        self._canvas = canvas  # <-- AQUÍ
         vsb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vsb.set)
 
@@ -62,9 +63,20 @@ class NewVisitWindow(tk.Toplevel):
 
         # Mousewheel (Windows)
         def _on_mousewheel(e: tk.Event) -> None:
+            if not canvas.winfo_exists():
+                return
             canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
 
-        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        def _bind_wheel(_e: tk.Event) -> None:
+            canvas.bind("<MouseWheel>", _on_mousewheel)
+
+        def _unbind_wheel(_e: tk.Event) -> None:
+            canvas.unbind("<MouseWheel>")
+
+        canvas.bind("<Enter>", _bind_wheel)
+        canvas.bind("<Leave>", _unbind_wheel)
+
+        self.protocol("WM_DELETE_WINDOW", self._close)
 
         # --- Vars ---
         self.fum = tk.StringVar()
@@ -249,13 +261,22 @@ class NewVisitWindow(tk.Toplevel):
         btns = ttk.Frame(frm)
         btns.grid(row=r, column=0, columnspan=4, sticky="e", pady=(16, 0))
         ttk.Button(btns, text="Guardar", command=self.save).pack(side=tk.LEFT)
-        ttk.Button(btns, text="Cancelar", command=self.destroy).pack(side=tk.LEFT, padx=8)
+        ttk.Button(btns, text="Cancelar", command=self._close).pack(side=tk.LEFT, padx=8)
 
         if self.cita_id is not None:
             self._load_for_edit(self.cita_id)
             self.ent_fum.configure(state="disabled")
             for w in (self.chk_pap, self.chk_md, self.chk_mi, self.cbo_biopsia):
                 w.configure(state="disabled")
+
+    def _close(self) -> None:
+        # Desconectar wheel del canvas (evita callbacks sobre widgets destruidos)
+        try:
+            if hasattr(self, "_canvas") and self._canvas.winfo_exists():
+                self._canvas.unbind("<MouseWheel>")
+        except Exception:
+            pass
+        self.destroy()
 
     def _to_int(self, v: str, *, default: int = 0) -> int:
         s = (v or "").strip()
