@@ -81,6 +81,7 @@ class VisitCreate:
     plan: str = ""
     forma_pago: str = "efectivo"
     semanas_gestacionales: str | None = None
+    fpp: str | None = None
 
 
 class VisitCrud:
@@ -106,8 +107,8 @@ class VisitCrud:
             (paciente_id, fecha_consulta, fum, g_p, g_c, g_a, g_ee, g_otros,
                 anticoncepcion, motivo_consulta, examen_fisico, colposcopia,
                 eco_vaginal, eco_mamas, otros_paraclinicos, diagnostico, plan,
-                semanas_gestacionales, forma_pago, actualizado_en)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                semanas_gestacionales, fpp, forma_pago, actualizado_en)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 v.paciente_id,
                 fecha,
@@ -127,6 +128,7 @@ class VisitCrud:
                 clean_opt(v.diagnostico),
                 clean_opt(v.plan),
                 clean_opt((v.semanas_gestacionales or "").strip() or None),
+                clean_opt((v.fpp or "").strip() or None),
                 forma_pago,
                 _now_iso(),
             ),

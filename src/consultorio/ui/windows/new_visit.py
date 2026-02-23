@@ -282,6 +282,10 @@ class NewVisitWindow(tk.Toplevel):
             self._fum_trace = self.fum.trace_add("write", lambda *_: self._update_sg())
             self._update_sg()
 
+        if self.cita_id is None:
+            self._fum_trace = self.fum.trace_add("write", lambda *_: self._update_fpp())
+            self._update_fpp()
+
     def _close(self) -> None:
         # Quitar trace de FUM
         try:
@@ -345,6 +349,9 @@ class NewVisitWindow(tk.Toplevel):
     def _update_sg(self) -> None:
         # Preview dinámico SOLO para cita nueva (porque en editar no ponemos trace_add)
         self.sg_var.set(self._calc_sg(self.fum.get()))
+
+    def _update_fpp(self) -> None:
+        # Preview dinámico SOLO para cita nueva (porque en editar no ponemos trace_add)
         self.fpp_var.set(self._calc_fpp(self.fum.get()))
 
     def save(self) -> None:
@@ -403,6 +410,9 @@ class NewVisitWindow(tk.Toplevel):
             sg_text = self._calc_sg(self.fum.get())
             sg_db = None if (not sg_text or sg_text == "—") else sg_text
 
+            fpp_text = self._calc_fpp(self.fum.get())
+            fpp_db = None if (not fpp_text or fpp_text == "—") else fpp_text
+
             v = VisitCreate(
                 paciente_id=self.paciente_id,
                 fum=self.fum.get().strip(),
@@ -421,6 +431,7 @@ class NewVisitWindow(tk.Toplevel):
                 diagnostico=self.txt_diagnostico.get("1.0", tk.END).strip(),
                 plan=self.txt_plan.get("1.0", tk.END).strip(),
                 semanas_gestacionales=sg_db,  # <- congelado en BD
+                fpp=fpp_db,  # <- congelado en BD
                 forma_pago=self.forma_pago.get().strip(),
             )
             cita_id = self.crud.create(v)
@@ -483,7 +494,7 @@ class NewVisitWindow(tk.Toplevel):
             SELECT fum, g_p, g_c, g_a, g_ee, g_otros,
                 anticoncepcion, motivo_consulta, examen_fisico, colposcopia,
                 eco_vaginal, eco_mamas, otros_paraclinicos, diagnostico, plan,
-                semanas_gestacionales, forma_pago
+                semanas_gestacionales, fpp, forma_pago
             FROM citas
             WHERE cita_id=?
             """,
@@ -509,6 +520,9 @@ class NewVisitWindow(tk.Toplevel):
         # Si todavía mantienes forma_pago en DB, la puedes conservar (aunque ya no se muestre)
         if hasattr(self, "forma_pago"):
             self.forma_pago.set(row["forma_pago"] or "")
+
+        if hasattr(self, "fpp_var"):
+            self.fpp_var.set(row["fpp"] or "—")
 
         # Textareas
         self._set_text(self.txt_anticoncepcion, row["anticoncepcion"])
@@ -543,3 +557,14 @@ class NewVisitWindow(tk.Toplevel):
                     self.var_mi.set(True)
             elif r["tipo"] == "biopsia":
                 self.biopsia.set(r["subtipo"] or "Ninguna")
+
+    def _calc_fpp(self, fum_text: str) -> str:
+        s = (fum_text or "").strip()
+        if not s:
+            return "—"
+        try:
+            fum_d = datetime.strptime(s, "%Y-%m-%d").date()
+        except ValueError:
+            return "—"
+        fpp_d = fum_d + timedelta(days=280)  # 40 semanas
+        return fpp_d.strftime("%Y-%m-%d")

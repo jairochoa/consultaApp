@@ -118,6 +118,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "citas", "diagnostico", "diagnostico TEXT")
     _ensure_column(conn, "citas", "plan", "plan TEXT")
     _ensure_column(conn, "citas", "semanas_gestacionales", "semanas_gestacionales TEXT")
+    _ensure_column(conn, "citas", "fpp", "fpp TEXT")
 
     # Opcional: índice para performance en listados
     conn.execute("CREATE INDEX IF NOT EXISTS idx_estudios_ordenado_en ON estudios(ordenado_en)")
