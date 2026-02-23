@@ -96,16 +96,16 @@ class TodayView(ttk.Frame):
         )
         self.mid.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("fecha", "cedula", "paciente", "motivo", "pago")
+        cols = ("#", "fecha", "cedula", "paciente", "motivo")
         self.tree = ttk.Treeview(
             self.mid, columns=cols, show="headings", height=14, style="Citas.Treeview"
         )
         for c, t, w in [
+            ("#", "#", 20),
             ("fecha", "Fecha", 170),
             ("cedula", "Cédula", 100),
             ("paciente", "Paciente", 260),
             ("motivo", "Motivo", 300),
-            ("pago", "Pago", 120),
         ]:
             self.tree.heading(c, text=t, anchor="w")
             self.tree.column(c, width=w, anchor="w")
@@ -214,10 +214,10 @@ class TodayView(ttk.Frame):
                 "end",
                 tags=(tag,),
                 values=(
+                    idx + 1,
                     r["fecha_consulta"],
                     r["cedula"],
                     r["paciente"],
                     (r["motivo_consulta"] or "")[:100],
-                    r["forma_pago"],
                 ),
             )

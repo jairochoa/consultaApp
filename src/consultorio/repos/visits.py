@@ -18,7 +18,7 @@ class VisitRepo:
                       c.motivo_consulta, c.forma_pago
                FROM citas c
                JOIN pacientes p ON p.paciente_id = c.paciente_id
-               WHERE date(c.fecha_consulta, 'localtime') = date('now','localtime')
+               WHERE date(c.fecha_consulta) = date('now','localtime')
                ORDER BY c.fecha_consulta DESC"""
         ).fetchall()
 
@@ -39,7 +39,7 @@ class VisitRepo:
                     c.motivo_consulta, c.forma_pago
             FROM citas c
             JOIN pacientes p ON p.paciente_id = c.paciente_id
-            WHERE date(c.fecha_consulta, 'localtime') BETWEEN date(?) AND date(?)
+            WHERE date(c.fecha_consulta) BETWEEN date(?) AND date(?)
             ORDER BY datetime(c.fecha_consulta) DESC
             LIMIT 1000""",
             (s, e),
