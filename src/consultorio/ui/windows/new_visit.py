@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tkinter as tk
 from tkinter import ttk
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from consultorio.config import load_config
 from consultorio.domain.rules import DomainError, validate_forma_pago
@@ -108,7 +108,8 @@ class NewVisitWindow(tk.Toplevel):
         )
         r += 1
 
-        # FUM + semanas gestacionales en la misma fila (2 columnas)
+        # FUM + semanas gestacionales + FPP (misma zona)
+
         ttk.Label(frm, text="FUM (YYYY-MM-DD):", style="Field.TLabel").grid(
             row=r, column=0, sticky="w"
         )
@@ -118,8 +119,16 @@ class NewVisitWindow(tk.Toplevel):
         ttk.Label(frm, text="Semanas gestacionales:", style="Field.TLabel").grid(
             row=r, column=2, sticky="w"
         )
+
+        sg_box = ttk.Frame(frm)
+        sg_box.grid(row=r, column=3, sticky="w", padx=(6, 0))
+
         self.sg_var = tk.StringVar(value="—")
-        ttk.Label(frm, textvariable=self.sg_var).grid(row=r, column=3, sticky="w", padx=(6, 0))
+        ttk.Label(sg_box, textvariable=self.sg_var).pack(side=tk.LEFT)
+
+        ttk.Label(sg_box, text="   FPP:", style="Field.TLabel").pack(side=tk.LEFT, padx=(12, 0))
+        self.fpp_var = tk.StringVar(value="—")
+        ttk.Label(sg_box, textvariable=self.fpp_var).pack(side=tk.LEFT)
         r += 1
 
         # =========================
@@ -261,7 +270,7 @@ class NewVisitWindow(tk.Toplevel):
         ttk.Button(btns, text="Cancelar", command=self._close).pack(side=tk.LEFT, padx=8)
 
         if self.cita_id is not None:
-            # self._load_for_edit(self.cita_id)
+            self._load_for_edit(self.cita_id)
             self.ent_fum.configure(state="disabled")
             for w in (self.chk_pap, self.chk_md, self.chk_mi, self.cbo_biopsia):
                 w.configure(state="disabled")
@@ -322,9 +331,21 @@ class NewVisitWindow(tk.Toplevel):
         days = delta_days % 7
         return f"{weeks} semanas y {days} días"
 
+    def _calc_fpp(self, fum_text: str) -> str:
+        s = (fum_text or "").strip()
+        if not s:
+            return "—"
+        try:
+            fum_d = datetime.strptime(s, "%Y-%m-%d").date()
+        except ValueError:
+            return "—"
+        fpp = fum_d + timedelta(days=280)  # 40 semanas
+        return fpp.strftime("%Y-%m-%d")
+
     def _update_sg(self) -> None:
         # Preview dinámico SOLO para cita nueva (porque en editar no ponemos trace_add)
         self.sg_var.set(self._calc_sg(self.fum.get()))
+        self.fpp_var.set(self._calc_fpp(self.fum.get()))
 
     def save(self) -> None:
         try:
@@ -451,3 +472,74 @@ class NewVisitWindow(tk.Toplevel):
             warn(str(e))
         except Exception as e:
             error(str(e))
+
+    def _set_text(self, txt: tk.Text, val: str | None) -> None:
+        txt.delete("1.0", tk.END)
+        txt.insert("1.0", val or "")
+
+    def _load_for_edit(self, cita_id: int) -> None:
+        row = self.conn.execute(
+            """
+            SELECT fum, g_p, g_c, g_a, g_ee, g_otros,
+                anticoncepcion, motivo_consulta, examen_fisico, colposcopia,
+                eco_vaginal, eco_mamas, otros_paraclinicos, diagnostico, plan,
+                semanas_gestacionales, forma_pago
+            FROM citas
+            WHERE cita_id=?
+            """,
+            (cita_id,),
+        ).fetchone()
+
+        if not row:
+            warn("No se encontró la cita.")
+            return
+
+        # Vars
+        self.fum.set(row["fum"] or "")
+        self.g_p.set(str(row["g_p"] or 0))
+        self.g_c.set(str(row["g_c"] or 0))
+        self.g_a.set(str(row["g_a"] or 0))
+        self.g_ee.set(str(row["g_ee"] or 0))
+        self.g_otros.set(str(row["g_otros"] or 0))
+
+        # semanas gestacionales (congeladas)
+        if hasattr(self, "sg_var"):
+            self.sg_var.set(row["semanas_gestacionales"] or "—")
+
+        # Si todavía mantienes forma_pago en DB, la puedes conservar (aunque ya no se muestre)
+        if hasattr(self, "forma_pago"):
+            self.forma_pago.set(row["forma_pago"] or "")
+
+        # Textareas
+        self._set_text(self.txt_anticoncepcion, row["anticoncepcion"])
+        self._set_text(self.motivo, row["motivo_consulta"])
+        self._set_text(self.txt_examen_fisico, row["examen_fisico"])
+        self._set_text(self.txt_colposcopia, row["colposcopia"])
+        self._set_text(self.txt_eco_vaginal, row["eco_vaginal"])
+        self._set_text(self.txt_eco_mamas, row["eco_mamas"])
+        self._set_text(self.txt_otros_para, row["otros_paraclinicos"])
+        self._set_text(self.txt_diagnostico, row["diagnostico"])
+        self._set_text(self.txt_plan, row["plan"])
+
+        # Estudios ordenados (solo para mostrar estado actual, pero luego se bloquearán en UI)
+        rows = self.conn.execute(
+            "SELECT tipo, subtipo FROM estudios WHERE cita_id=?",
+            (cita_id,),
+        ).fetchall()
+
+        # reset checks/combos
+        self.var_pap.set(False)
+        self.var_md.set(False)
+        self.var_mi.set(False)
+        self.biopsia.set("Ninguna")
+
+        for r in rows:
+            if r["tipo"] == "citologia":
+                if r["subtipo"] == "PAP":
+                    self.var_pap.set(True)
+                elif r["subtipo"] == "MD":
+                    self.var_md.set(True)
+                elif r["subtipo"] == "MI":
+                    self.var_mi.set(True)
+            elif r["tipo"] == "biopsia":
+                self.biopsia.set(r["subtipo"] or "Ninguna")

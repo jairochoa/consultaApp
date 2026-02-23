@@ -198,6 +198,8 @@ class PatientsView(ttk.Frame):
         cols_h = ("fecha", "motivo", "pago")
         self.tree_hist = ttk.Treeview(hist, columns=cols_h, show="headings", height=6)
         self.tree_hist.bind("<Double-1>", self.open_visit_from_history)
+        # self.tree_hist.bind("<Double-1>", self._on_hist_double_click, add=True)
+
         for c, t, w in [
             ("fecha", "Fecha", 170),
             ("motivo", "Motivo", 520),
@@ -790,23 +792,26 @@ class PatientsView(ttk.Frame):
         sel = self.tree_hist.selection()
         if not sel:
             return
+
+        if self.selected_id is None:
+            warn("Selecciona un paciente primero.")
+            return
+
         try:
-            cita_id = int(sel[0])  # porque iid = cita_id
+            cita_id = int(sel[0])  # iid = cita_id
         except ValueError:
             warn("Selección inválida.")
             return
 
-        # Abrir ventana en modo edición
         win = NewVisitWindow(
             self,
             self.conn,
-            paciente_id=self.selected_id,  # opcional, por si tu ventana lo usa
-            cita_id=cita_id,  # 👈 nuevo
+            paciente_id=self.selected_id,  # <- ya es int seguro
+            cita_id=cita_id,
             bus=self.bus,
         )
         self.wait_window(win)
 
         # refrescar panels del paciente seleccionado
-        if self.selected_id is not None:
-            self._load_hist(self.selected_id)
-            self._load_studies(self.selected_id)
+        self._load_hist(self.selected_id)
+        self._load_studies(self.selected_id)
