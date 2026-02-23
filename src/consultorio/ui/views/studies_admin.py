@@ -13,7 +13,7 @@ from consultorio.ui.widgets.common import error, info, warn
 from consultorio.ui.windows.edit_result import EditResultWindow
 
 
-STATUS_COLS = ["ordenado", "enviado", "pagado", "recibido", "entregado"]
+STATUS_COLS = ["enviado", "pagado", "recibido", "entregado"]
 
 # Paleta de colores moderna
 COLORS = {
@@ -58,9 +58,6 @@ class StudiesAdminView(ttk.Frame):
         self.filter_estado = tk.StringVar(value="Todos")
         self.filter_tipo = tk.StringVar(value="Todos")
         self.filter_centro = tk.StringVar(value="Todos")
-
-        # si filtras por enviado_en: útil decidir si incluyes los no enviados
-        self.filter_include_not_sent = tk.BooleanVar(value=True)
 
         self.filter_centro = tk.StringVar(value="Todos")  # filtro
         self.assign_centro = tk.StringVar(value="")  # asignación
@@ -273,7 +270,7 @@ class StudiesAdminView(ttk.Frame):
         filters_row2 = ttk.Frame(filter_frame, style="Modern.TFrame")
         filters_row2.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(filters_row2, text="Enviado desde:", style="Modern.TLabel").pack(
+        ttk.Label(filters_row2, text="Consulta desde:", style="Modern.TLabel").pack(
             side=tk.LEFT, padx=(0, 6)
         )
         self.de_from = DateEntry(filters_row2, width=11, date_pattern="yyyy-mm-dd")
@@ -285,12 +282,8 @@ class StudiesAdminView(ttk.Frame):
         self.de_to = DateEntry(filters_row2, width=11, date_pattern="yyyy-mm-dd")
         self.de_to.pack(side=tk.LEFT, padx=(0, 16))
 
-        ttk.Checkbutton(
-            filters_row2,
-            text="Incluir no enviados",
-            variable=self.filter_include_not_sent,
-            style="Modern.TCheckbutton",
-        ).pack(side=tk.LEFT, padx=(0, 16))
+        self.de_from.delete(0, tk.END)
+        self.de_to.delete(0, tk.END)
 
         # Botones de acción para filtros
         ttk.Button(
@@ -369,12 +362,12 @@ class StudiesAdminView(ttk.Frame):
         hsb = ttk.Scrollbar(tree_scroll_frame, orient=tk.HORIZONTAL)
 
         cols = (
+            "fecha_cita",
             "cedula",
             "paciente",
             "tipo",
             "subtipo",
             "centro",
-            "ordenado",
             "enviado",
             "pagado",
             "recibido",
@@ -396,16 +389,16 @@ class StudiesAdminView(ttk.Frame):
         hsb.config(command=self.tree.xview)
 
         headings = [
-            ("cedula", "Cédula", 110),
-            ("paciente", "Nombre-Apellido", 220),
+            ("fecha_cita", "Fecha de cita", 100),
+            ("cedula", "Cédula", 100),
+            ("paciente", "Nombre-Apellido", 150),
             ("tipo", "Estudio", 90),
-            ("subtipo", "Subtipo", 140),
-            ("centro", "Centro", 180),
-            ("ordenado", "Ordenado", 90),
-            ("enviado", "Enviado", 90),
-            ("pagado", "Pagado", 90),
-            ("recibido", "Recibido", 90),
-            ("entregado", "Entregado", 90),
+            ("subtipo", "Subtipo", 90),
+            ("centro", "Centro", 120),
+            ("enviado", "Enviado", 70),
+            ("pagado", "Pagado", 70),
+            ("recibido", "Recibido", 70),
+            ("entregado", "Entregado", 70),
         ]
 
         for c, t, w in headings:
@@ -453,17 +446,22 @@ class StudiesAdminView(ttk.Frame):
 
         centro_id = self._resolve_center_id_by_name(self.filter_centro.get())
 
-        enviado_from = self.de_from.get_date().isoformat() if hasattr(self, "de_from") else None
-        enviado_to = self.de_to.get_date().isoformat() if hasattr(self, "de_to") else None
+        cita_from = self.de_from.get().strip() if hasattr(self, "de_from") else ""
+        cita_to = self.de_to.get().strip() if hasattr(self, "de_to") else ""
+        cita_from = cita_from or None
+        cita_to = cita_to or None
+
+        if cita_from and cita_to and cita_from > cita_to:
+            warn("Rango de fechas inválido: 'Desde' no puede ser mayor que 'Hasta'.")
+            return
 
         rows = self.repo.list_admin_filtered(
             q=self.filter_q.get(),
             estado=self.filter_estado.get(),
             tipo=self.filter_tipo.get(),
             centro_id=centro_id,
-            enviado_from=enviado_from,
-            enviado_to=enviado_to,
-            include_not_sent=bool(self.filter_include_not_sent.get()),
+            cita_from=cita_from,
+            cita_to=cita_to,
             limit=1500,
         )
 
@@ -475,12 +473,12 @@ class StudiesAdminView(ttk.Frame):
                 iid=str(r["estudio_id"]),
                 tags=(tag,),
                 values=(
+                    r["fecha_cita"] if r["fecha_cita"] else "Sin fecha",
                     r["cedula"],
                     r["paciente"],
                     r["tipo"],
                     r["subtipo"],
                     r["centro_nombre"] or "",
-                    self._mark(r["ordenado_en"]),
                     self._mark(r["enviado_en"]),
                     self._mark(r["pagado_en"]),
                     self._mark(r["recibido_en"]),
@@ -658,13 +656,6 @@ class StudiesAdminView(ttk.Frame):
             self._anchor_iid = row_id
             return None
 
-        # No permitimos editar "ordenado"
-        if col_name == "ordenado":
-            warn("El estado 'ordenado' no se modifica manualmente.")
-            # Aun así dejamos selección consistente
-            self._update_selection_for_click(row_id, event)
-            return "break"
-
         # Aquí SÍ interceptamos: primero ajustamos selección (sin romperla)
         self._update_selection_for_click(row_id, event)
 
@@ -832,7 +823,10 @@ class StudiesAdminView(ttk.Frame):
         self.filter_estado.set("Todos")
         self.filter_tipo.set("Todos")
         self.filter_centro.set("Todos")
-        self.filter_include_not_sent.set(True)
+        if hasattr(self, "de_from"):
+            self.de_from.delete(0, tk.END)
+        if hasattr(self, "de_to"):
+            self.de_to.delete(0, tk.END)
         self.refresh()
 
     def _is_ctrl(self, event: tk.Event) -> bool:

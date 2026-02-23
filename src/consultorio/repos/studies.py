@@ -263,42 +263,35 @@ class StudyRepo:
         estado: str = "Todos",
         tipo: str = "Todos",
         centro_id: int | None = None,
-        enviado_from: str | None = None,  # "YYYY-MM-DD"
-        enviado_to: str | None = None,  # "YYYY-MM-DD"
-        include_not_sent: bool = True,
+        cita_from: str | None = None,  # "YYYY-MM-DD"
+        cita_to: str | None = None,  # "YYYY-MM-DD"
         limit: int = 1500,
     ) -> list[sqlite3.Row]:
         where: list[str] = []
         params: list[object] = []
 
-        # --- filtro por rango de enviado_en ---
-        if enviado_from or enviado_to:
-            if include_not_sent:
-                parts: list[str] = []
-                if enviado_from:
-                    parts.append("date(e.enviado_en) >= date(?)")
-                    params.append(enviado_from)
-                if enviado_to:
-                    parts.append("date(e.enviado_en) <= date(?)")
-                    params.append(enviado_to)
-
-                if parts:
-                    where.append("(e.enviado_en IS NULL OR (" + " AND ".join(parts) + "))")
-                else:
-                    where.append("e.enviado_en IS NULL")
-            else:
-                where.append("e.enviado_en IS NOT NULL")
-                if enviado_from:
-                    where.append("date(e.enviado_en) >= date(?)")
-                    params.append(enviado_from)
-                if enviado_to:
-                    where.append("date(e.enviado_en) <= date(?)")
-                    params.append(enviado_to)
+        # --- filtro por rango de FECHA DE CITA (incluye todos los estudios) ---
+        if cita_from:
+            where.append("date(c.fecha_consulta, 'localtime') >= date(?)")
+            params.append(cita_from)
+        if cita_to:
+            where.append("date(c.fecha_consulta, 'localtime') <= date(?)")
+            params.append(cita_to)
 
         # --- otros filtros ---
         if estado and estado != "Todos":
-            where.append("e.estado_actual = ?")
-            params.append(estado)
+            st = (estado or "").strip().lower()
+
+            if st == "ordenado":
+                where.append("e.ordenado_en IS NOT NULL AND e.enviado_en IS NULL")
+            elif st == "enviado":
+                where.append("e.enviado_en IS NOT NULL AND e.pagado_en IS NULL")
+            elif st == "pagado":
+                where.append("e.pagado_en IS NOT NULL AND e.recibido_en IS NULL")
+            elif st == "recibido":
+                where.append("e.recibido_en IS NOT NULL AND e.entregado_en IS NULL")
+            elif st == "entregado":
+                where.append("e.entregado_en IS NOT NULL")
 
         if tipo and tipo != "Todos":
             where.append("e.tipo = ?")
@@ -317,22 +310,33 @@ class StudyRepo:
             params.extend([like, like, like])
 
         sql = """
-            SELECT e.estudio_id, e.tipo, e.subtipo,
-                e.centro_id, ch.nombre AS centro_nombre,
+            SELECT
+                e.estudio_id,
+                e.tipo,
+                e.subtipo,
+                e.centro_id,
+                ch.nombre AS centro_nombre,
                 e.estado_actual,
-                e.ordenado_en, e.enviado_en, e.pagado_en, e.recibido_en, e.entregado_en,
-                e.resultado, e.resultado_editado_en,
+                e.ordenado_en,
+                e.enviado_en,
+                e.pagado_en,
+                e.recibido_en,
+                e.entregado_en,
+                e.resultado,
+                e.resultado_editado_en,
                 p.cedula,
-                p.apellidos || ', ' || p.nombres AS paciente
+                p.apellidos || ', ' || p.nombres AS paciente,
+                date(c.fecha_consulta, 'localtime') AS fecha_cita
             FROM estudios e
             JOIN pacientes p ON p.paciente_id = e.paciente_id
+            JOIN citas c ON c.cita_id = e.cita_id
             LEFT JOIN centros_histologicos ch ON ch.centro_id = e.centro_id
         """
 
         if where:
             sql += " WHERE " + " AND ".join(where)
 
-        sql += " ORDER BY datetime(e.ordenado_en) DESC, e.estudio_id DESC LIMIT ?"
+        sql += " ORDER BY datetime(c.fecha_consulta) DESC, e.estudio_id DESC LIMIT ?"
         params.append(int(limit))
 
         return self.conn.execute(sql, tuple(params)).fetchall()
