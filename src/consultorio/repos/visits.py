@@ -80,6 +80,7 @@ class VisitCreate:
     diagnostico: str = ""
     plan: str = ""
     forma_pago: str = "efectivo"
+    semanas_gestacionales: str | None = None
 
 
 class VisitCrud:
@@ -89,36 +90,44 @@ class VisitCrud:
     def create(self, v: VisitCreate) -> int:
         if not v.paciente_id:
             raise DomainError("paciente_id requerido.")
-        if not v.forma_pago.strip():
+
+        forma_pago = (v.forma_pago or "").strip()
+        if not forma_pago:
             raise DomainError("Forma de pago requerida.")
 
+        def clean_opt(s: str | None) -> str | None:
+            s = (s or "").strip()
+            return s or None
+
         fecha = v.fecha_consulta or _now_iso()
+
         cur = self.conn.execute(
             """INSERT INTO citas
-               (paciente_id, fecha_consulta, fum, g_p, g_c, g_a, g_ee, g_otros,
+            (paciente_id, fecha_consulta, fum, g_p, g_c, g_a, g_ee, g_otros,
                 anticoncepcion, motivo_consulta, examen_fisico, colposcopia,
-                eco_vaginal, eco_mamas, otros_paraclinicos, diagnostico, plan, forma_pago,
-                actualizado_en)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                eco_vaginal, eco_mamas, otros_paraclinicos, diagnostico, plan,
+                semanas_gestacionales, forma_pago, actualizado_en)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 v.paciente_id,
                 fecha,
-                v.fum or None,
+                clean_opt(v.fum),
                 int(v.g_p),
                 int(v.g_c),
                 int(v.g_a),
                 int(v.g_ee),
                 int(v.g_otros),
-                v.anticoncepcion.strip() or None,
-                v.motivo_consulta.strip() or None,
-                v.examen_fisico.strip() or None,
-                v.colposcopia.strip() or None,
-                v.eco_vaginal.strip() or None,
-                v.eco_mamas.strip() or None,
-                v.otros_paraclinicos.strip() or None,
-                v.diagnostico.strip() or None,
-                v.plan.strip() or None,
-                v.forma_pago.strip(),
+                clean_opt(v.anticoncepcion),
+                clean_opt(v.motivo_consulta),
+                clean_opt(v.examen_fisico),
+                clean_opt(v.colposcopia),
+                clean_opt(v.eco_vaginal),
+                clean_opt(v.eco_mamas),
+                clean_opt(v.otros_paraclinicos),
+                clean_opt(v.diagnostico),
+                clean_opt(v.plan),
+                clean_opt((v.semanas_gestacionales or "").strip() or None),
+                forma_pago,
                 _now_iso(),
             ),
         )

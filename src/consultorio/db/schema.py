@@ -25,6 +25,7 @@ _SCHEMA: list[str] = [
         paciente_id INTEGER NOT NULL,
         fecha_consulta TEXT NOT NULL DEFAULT (datetime('now')),
         fum TEXT,
+        semanas_gestacionales TEXT,
         g_p INTEGER NOT NULL DEFAULT 0,
         g_c INTEGER NOT NULL DEFAULT 0,
         g_a INTEGER NOT NULL DEFAULT 0,
@@ -116,6 +117,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "citas", "otros_paraclinicos", "otros_paraclinicos TEXT")
     _ensure_column(conn, "citas", "diagnostico", "diagnostico TEXT")
     _ensure_column(conn, "citas", "plan", "plan TEXT")
+    _ensure_column(conn, "citas", "semanas_gestacionales", "semanas_gestacionales TEXT")
 
     # Opcional: índice para performance en listados
     conn.execute("CREATE INDEX IF NOT EXISTS idx_estudios_ordenado_en ON estudios(ordenado_en)")

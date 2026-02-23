@@ -285,7 +285,7 @@ class PatientsView(ttk.Frame):
             self.tree_hist.insert(
                 "",
                 "end",
-                iid=str(r["cita_id"]),   # 👈 clave
+                iid=str(r["cita_id"]),  # 👈 clave
                 tags=(tag,),
                 values=(r["fecha_consulta"], (r["motivo_consulta"] or "")[:120], r["forma_pago"]),
             )
@@ -352,6 +352,12 @@ class PatientsView(ttk.Frame):
             t.configure(yscrollcommand=sb.set)
 
         return t
+
+    def _ui_alive(self) -> bool:
+        try:
+            return bool(self.winfo_exists())
+        except tk.TclError:
+            return False
 
     # ---------------- Actions ----------------
 
@@ -478,6 +484,8 @@ class PatientsView(ttk.Frame):
             error(str(e))
 
     def open_new_visit(self) -> None:
+        if not self._ui_alive():
+            return
         if self.selected_id is None:
             warn("Selecciona un paciente primero.")
             return
@@ -485,10 +493,11 @@ class PatientsView(ttk.Frame):
         win = NewVisitWindow(self, self.conn, paciente_id=self.selected_id, bus=self.bus)
         self.wait_window(win)
 
-        if not self.winfo_exists():
+        if not self._ui_alive():  # <- importante: la app puede cerrarse mientras esperabas
             return
 
-        self.after(0, self._refresh_selected_patient_panels)
+        self._load_hist(self.selected_id)
+        self._load_studies(self.selected_id)
 
     def _add_placeholder(self, entry: ttk.Entry, placeholder: str) -> None:
         # Guardar placeholder en el widget (1 vez)
@@ -791,8 +800,8 @@ class PatientsView(ttk.Frame):
         win = NewVisitWindow(
             self,
             self.conn,
-            paciente_id=self.selected_id,   # opcional, por si tu ventana lo usa
-            cita_id=cita_id,               # 👈 nuevo
+            paciente_id=self.selected_id,  # opcional, por si tu ventana lo usa
+            cita_id=cita_id,  # 👈 nuevo
             bus=self.bus,
         )
         self.wait_window(win)
