@@ -362,6 +362,7 @@ class StudiesAdminView(ttk.Frame):
         hsb = ttk.Scrollbar(tree_scroll_frame, orient=tk.HORIZONTAL)
 
         cols = (
+            "#",
             "fecha_cita",
             "cedula",
             "paciente",
@@ -389,21 +390,24 @@ class StudiesAdminView(ttk.Frame):
         hsb.config(command=self.tree.xview)
 
         headings = [
-            ("fecha_cita", "Fecha de cita", 100),
-            ("cedula", "Cédula", 100),
-            ("paciente", "Nombre-Apellido", 150),
-            ("tipo", "Estudio", 90),
-            ("subtipo", "Subtipo", 90),
-            ("centro", "Centro", 120),
-            ("enviado", "Enviado", 70),
-            ("pagado", "Pagado", 70),
-            ("recibido", "Recibido", 70),
-            ("entregado", "Entregado", 70),
+            ("#", "#", 20),
+            ("fecha_cita", "Fecha de cita", 50),
+            ("cedula", "Cédula", 70),
+            ("paciente", "Nombre-Apellido", 140),
+            ("tipo", "Estudio", 50),
+            ("subtipo", "Subtipo", 80),
+            ("centro", "Centro", 160),
+            ("enviado", "Enviado", 50),
+            ("pagado", "Pagado", 50),
+            ("recibido", "Recibido", 50),
+            ("entregado", "Entregado", 50),
         ]
 
         for c, t, w in headings:
             self.tree.heading(c, text=t, anchor="w")
             self.tree.column(c, width=w, anchor="w")
+            if c == "#":
+                self.tree.column(c, anchor="e")  # derecha
 
         self.tree.grid(row=0, column=0, sticky="nsew")
         vsb.grid(row=0, column=1, sticky="ns")
@@ -473,6 +477,7 @@ class StudiesAdminView(ttk.Frame):
                 iid=str(r["estudio_id"]),
                 tags=(tag,),
                 values=(
+                    idx + 1,
                     r["fecha_cita"] if r["fecha_cita"] else "Sin fecha",
                     r["cedula"],
                     r["paciente"],

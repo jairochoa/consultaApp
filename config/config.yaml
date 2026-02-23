@@ -25,7 +25,7 @@ clinic:
     max_biopsies_per_visit: 1
   
   histology_centers:
-    - Centro Histológico Principal
+    - Centro Histopatológico Paseo de la Feria
     - Centro Histológico Alterno
 
 dashboard:
