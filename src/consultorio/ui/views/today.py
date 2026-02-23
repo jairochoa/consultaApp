@@ -4,6 +4,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk
 from datetime import date, timedelta
+from tkinter import messagebox
 
 from tkcalendar import DateEntry
 
@@ -22,6 +23,7 @@ class TodayView(ttk.Frame):
         self.bus.subscribe("visits", self.refresh)
         self.bus.subscribe("studies", self.refresh)
         self.repo = VisitRepo(conn)
+        self.root = self.winfo_toplevel()
         self._build()
 
     def _build(self) -> None:
@@ -76,6 +78,8 @@ class TodayView(ttk.Frame):
             side=tk.LEFT, padx=(0, 8)
         )
         ttk.Button(top, text="Este trimestre", command=self._set_this_quarter).pack(side=tk.LEFT)
+
+        ttk.Button(top, text="Salir", command=self._safe_exit).pack(side=tk.LEFT, padx=(16, 0))
 
         # --- Paned vertical: Citas arriba / Panel inferior por definir ---
         pan = ttk.PanedWindow(self, orient=tk.VERTICAL)
@@ -221,3 +225,11 @@ class TodayView(ttk.Frame):
                     (r["motivo_consulta"] or "")[:100],
                 ),
             )
+
+    def _safe_exit(self) -> None:
+        if messagebox.askyesno(
+            "Confirmar salida",
+            "¿Deseas salir del sistema?\n\nRecuerda: Guarda una copia de seguridad después de salir.",
+            parent=self,
+        ):
+            self.root.destroy()

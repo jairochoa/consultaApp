@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
 
 from consultorio.config import Settings
 from consultorio.ui.events import EventBus
@@ -15,6 +16,17 @@ def run_main_window(cfg: Settings, conn: sqlite3.Connection) -> None:
     root = tk.Tk()
     root.title(cfg.app.title)
     root.geometry("1100x700")
+
+    def on_close() -> None:
+        messagebox.showwarning(
+            "Cierre seguro",
+            "Para un cierre seguro usa el botón 'Salir' en la pestaña 'Consultas de hoy'.",
+            parent=root,
+        )
+        # Si quieres impedir cierre por X:
+        return
+
+    root.protocol("WM_DELETE_WINDOW", on_close)
 
     bus = EventBus()
 
