@@ -38,10 +38,6 @@ class NewVisitWindow(tk.Toplevel):
         style = ttk.Style()
         style.configure("Field.TLabel", font=("Segoe UI", 9, "bold"), foreground="#0b2d5c")
 
-        # Ventana más usable
-        self.geometry("900x820")
-        self.resizable(True, True)
-
         # --- Scrollable container ---
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
@@ -304,6 +300,32 @@ class NewVisitWindow(tk.Toplevel):
         if self.cita_id is None:
             self._fum_trace = self.fum.trace_add("write", self._update_sg)
             self._update_sg()
+
+        self.after(50, self._autosize_to_content)
+
+    def _autosize_to_content(self) -> None:
+        # Ajusta tamaño al contenido, con límite para que no se salga de pantalla
+        try:
+            self.update_idletasks()
+
+            frm = self._canvas.winfo_children()[0]  # el frame dentro del canvas
+            req_w = frm.winfo_reqwidth() + 60
+            req_h = frm.winfo_reqheight() + 80
+
+            max_w = 1100
+            max_h = 850
+
+            w = min(max(req_w, 850), max_w)
+            h = min(max(req_h, 650), max_h)
+
+            self.geometry(f"{w}x{h}")
+
+            # si el contenido cabe, desactiva scrollbar (opcional)
+            if req_h <= h:
+                self._canvas.yview_moveto(0)
+
+        except Exception:
+            pass
 
     def _close(self) -> None:
         # Quitar trace de FUM

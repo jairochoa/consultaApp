@@ -37,9 +37,10 @@ def fmt_dt_ui(value: Optional[str], *, with_time: bool = True) -> str:
 def parse_dmy_input(value: Optional[str]) -> Optional[date]:
     """
     Acepta:
-      - ddmmyyyy, dd-mm-yyyy, dd/mm/yyyy
-      - yyyymmdd, yyyy-mm-dd, yyyy/mm/dd
-    Retorna date o None si inválida.
+      - ddmmyyyy (8 dígitos)  ✅ prioridad
+      - dd-mm-yyyy / dd/mm/yyyy
+      - yyyy-mm-dd / yyyy/mm/dd  (solo con separador)
+      - yyyymmdd (solo si explícitamente quieres soportarlo; aquí NO lo usamos por ambigüedad)
     """
     if not value:
         return None
@@ -47,30 +48,36 @@ def parse_dmy_input(value: Optional[str]) -> Optional[date]:
     if not s:
         return None
 
+    # Si trae separadores, detectamos orden explícito
+    if "-" in s or "/" in s:
+        sep = "-" if "-" in s else "/"
+        parts = [p for p in s.split(sep) if p]
+        if len(parts) != 3:
+            return None
+        # yyyy-mm-dd
+        if len(parts[0]) == 4:
+            try:
+                y, m, d = map(int, parts)
+                return date(y, m, d)
+            except Exception:
+                return None
+        # dd-mm-yyyy
+        try:
+            d, m, y = map(int, parts)
+            return date(y, m, d)
+        except Exception:
+            return None
+
+    # Sin separadores: asumir ddmmyyyy (evita ambigüedad tipo 19091979)
     digits = "".join(ch for ch in s if ch.isdigit())
     if len(digits) != 8:
         return None
 
-    # Caso A: ddmmyyyy
-    dd_a = int(digits[0:2])
-    mm_a = int(digits[2:4])
-    yy_a = int(digits[4:8])
-
-    # Caso B: yyyymmdd
-    yy_b = int(digits[0:4])
-    mm_b = int(digits[4:6])
-    dd_b = int(digits[6:8])
-
-    # Heurística: si empieza con año razonable (1900-2100), preferir yyyyMMdd
-    if 1900 <= yy_b <= 2100:
-        try:
-            return date(yy_b, mm_b, dd_b)
-        except ValueError:
-            return None
-
-    # Si no parece año, usar ddmmyyyy
+    dd = int(digits[0:2])
+    mm = int(digits[2:4])
+    yyyy = int(digits[4:8])
     try:
-        return date(yy_a, mm_a, dd_a)
+        return date(yyyy, mm, dd)
     except ValueError:
         return None
 
