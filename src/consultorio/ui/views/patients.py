@@ -144,11 +144,16 @@ class PatientsView(ttk.Frame):
 
         self.q = tk.StringVar()
         ttk.Entry(top_pat, textvariable=self.q, width=34).pack(side=tk.LEFT, padx=6)
-        ttk.Button(top_pat, text="Buscar", command=self.refresh).pack(side=tk.LEFT, padx=6)
+
+        # (Opcional) puedes dejar el botón Buscar o quitarlo. En este caso vamos a quitarlo
+        # ttk.Button(top_pat, text="Buscar", command=self.refresh).pack(side=tk.LEFT, padx=6)
+
+        self._search_job: str | None = None
+        self.q.trace_add("write", self._on_search_change)
 
         # Botones a la IZQUIERDA
         self.btn_new_visit = ttk.Button(
-            top_pat, text="Nueva cita", command=self.open_new_visit, state=tk.DISABLED
+            top_pat, text="Nueva consulta", command=self.open_new_visit, state=tk.DISABLED
         )
         self.btn_new_visit.pack(side=tk.LEFT, padx=(12, 6))
 
@@ -240,17 +245,18 @@ class PatientsView(ttk.Frame):
             self._load_studies(self.selected_id)
 
     def refresh(self) -> None:
-        prev = self.selected_id  # para intentar mantener selección
+        prev = self.selected_id  # mantener selección si es posible
 
         for i in self.tree.get_children():
             self.tree.delete(i)
 
         rows = self.repo.search(self.q.get())
         for r in rows:
+            pid = int(r["paciente_id"])
             self.tree.insert(
                 "",
                 "end",
-                iid=str(r["paciente_id"]),
+                iid=str(pid),
                 values=(
                     r["nombres"] or "",
                     r["apellidos"] or "",
@@ -258,17 +264,24 @@ class PatientsView(ttk.Frame):
                     str(r["edad"] or ""),
                     r["cedula"] or "",
                     r["telefono"] or "",
-                    fmt_dt_ui(r["creado_en"], with_time=True),  # yyyy-mm-dd hh:mm
+                    fmt_dt_ui(r["creado_en"], with_time=True) if (r["creado_en"] or "") else "",
                 ),
             )
 
-        # restaurar selección si todavía existe
+        # Restaurar selección si todavía existe
         if prev is not None and self.tree.exists(str(prev)):
             self.tree.selection_set(str(prev))
             self.tree.see(str(prev))
+            self.btn_new_visit.config(state=tk.NORMAL)
+            self.btn_delete.config(state=tk.NORMAL)
             self._load_hist(prev)
             self._load_studies(prev)
         else:
+            # selección ya no está en el filtro actual
+            self.selected_id = None
+            self.tree.selection_remove(self.tree.selection())
+            self.btn_new_visit.config(state=tk.DISABLED)
+            self.btn_delete.config(state=tk.DISABLED)
             self._clear_hist()
             self._clear_studies()
 
@@ -328,6 +341,19 @@ class PatientsView(ttk.Frame):
             )
 
     # ---------------- Form helpers ----------------
+
+    def _on_search_change(self, *_: object) -> None:
+        # debounce: esperar 200ms tras la última tecla
+        if self._search_job is not None:
+            try:
+                self.after_cancel(self._search_job)
+            except Exception:
+                pass
+        self._search_job = self.after(200, self._run_search)
+
+    def _run_search(self) -> None:
+        self._search_job = None
+        self.refresh()
 
     def _row_entry(
         self, master: tk.Misc, label: str, var: tk.StringVar, width: int = 26

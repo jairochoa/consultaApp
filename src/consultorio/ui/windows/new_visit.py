@@ -28,7 +28,7 @@ class NewVisitWindow(tk.Toplevel):
         self.crud = VisitCrud(conn)
 
         self.title("Nueva Consulta")
-        self.geometry("900x820")
+        self.geometry("980x820")
         self.resizable(True, True)
 
         self._build()
@@ -39,7 +39,7 @@ class NewVisitWindow(tk.Toplevel):
         style.configure("Field.TLabel", font=("Segoe UI", 9, "bold"), foreground="#0b2d5c")
 
         # Ventana más usable
-        self.geometry("980x820")
+        self.geometry("900x820")
         self.resizable(True, True)
 
         # --- Scrollable container ---
