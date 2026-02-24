@@ -12,6 +12,9 @@ from consultorio.repos.visits import VisitCreate, VisitCrud
 from consultorio.ui.events import EventBus
 from consultorio.ui.widgets.common import error, info, warn
 
+from consultorio.ui.utils.dates import fmt_dt_ui
+from consultorio.ui.utils.dates import parse_dmy_input, fmt_dmy, allow_dmy_typing
+
 
 class NewVisitWindow(tk.Toplevel):
     def __init__(self, master, conn, paciente_id: int, *, bus, cita_id: int | None = None):
@@ -24,8 +27,8 @@ class NewVisitWindow(tk.Toplevel):
         self.bus = bus
         self.crud = VisitCrud(conn)
 
-        self.title("Nueva cita")
-        self.geometry("980x820")
+        self.title("Nueva Consulta")
+        self.geometry("900x820")
         self.resizable(True, True)
 
         self._build()
@@ -108,15 +111,34 @@ class NewVisitWindow(tk.Toplevel):
         )
         r += 1
 
+        # Fecha de consulta (fija)
+        ttk.Label(frm, text="Fecha de consulta:", style="Field.TLabel").grid(
+            row=r, column=0, sticky="w"
+        )
+        self.consulta_var = tk.StringVar(value="")
+        ttk.Label(frm, textvariable=self.consulta_var, style="Field.TLabel").grid(
+            row=r, column=1, columnspan=3, sticky="w", padx=(6, 0)
+        )
+        r += 1
+
+        if self.cita_id is None:
+            self.consulta_var.set(datetime.now().strftime("%d-%m-%Y %H:%M"))
+
         # FUM + semanas gestacionales + FPP (misma zona)
 
-        ttk.Label(frm, text="FUM (YYYY-MM-DD):", style="Field.TLabel").grid(
+        ttk.Label(frm, text="FUM (dd-mm-yyyy):", style="Field.TLabel").grid(
             row=r, column=0, sticky="w"
         )
         self.ent_fum = ttk.Entry(frm, textvariable=self.fum, width=18)
         self.ent_fum.grid(row=r, column=1, sticky="w", padx=(6, 18))
 
-        ttk.Label(frm, text="Semanas gestacionales:", style="Field.TLabel").grid(
+        # FUM: acepta ddmmyyyy o dd-mm-yyyy (autoformato)
+        vcmd = (self.register(lambda P: allow_dmy_typing(P)), "%P")
+        self.ent_fum.configure(validate="key", validatecommand=vcmd)
+        # self.ent_fum.bind("<KeyRelease>", lambda _e: self._format_dmy_entry(self.ent_fum), add=True)
+        self.ent_fum.bind("<FocusOut>", self._normalize_fum_on_blur, add=True)
+
+        ttk.Label(frm, text="Edad gestacional:", style="Field.TLabel").grid(
             row=r, column=2, sticky="w"
         )
 
@@ -126,9 +148,10 @@ class NewVisitWindow(tk.Toplevel):
         self.sg_var = tk.StringVar(value="—")
         ttk.Label(sg_box, textvariable=self.sg_var).pack(side=tk.LEFT)
 
-        ttk.Label(sg_box, text="   FPP:", style="Field.TLabel").pack(side=tk.LEFT, padx=(12, 0))
+        ttk.Label(sg_box, text="     FPP:", style="Field.TLabel").pack(side=tk.LEFT, padx=(12, 0))
         self.fpp_var = tk.StringVar(value="—")
         ttk.Label(sg_box, textvariable=self.fpp_var).pack(side=tk.LEFT)
+
         r += 1
 
         # =========================
@@ -192,27 +215,27 @@ class NewVisitWindow(tk.Toplevel):
         # TEXTAREAS EN 2 COLUMNAS (cada fila con 2)
         # =========================
         # Fila 1: Anticoncepción | Motivo
-        self.txt_anticoncepcion = add_textarea_2col(r, 0, "Anticoncepción:", height=4)
-        self.motivo = add_textarea_2col(r, 2, "Motivo de consulta:", height=4)
+        self.txt_anticoncepcion = add_textarea_2col(r, 0, "Anticoncepción:", height=2)
+        self.motivo = add_textarea_2col(r, 2, "Motivo de consulta:", height=3)
         r += 2
 
         # Fila 2: Examen físico | Colposcopia
-        self.txt_examen_fisico = add_textarea_2col(r, 0, "Examen físico:", height=5)
-        self.txt_colposcopia = add_textarea_2col(r, 2, "Colposcopia:", height=5)
+        self.txt_examen_fisico = add_textarea_2col(r, 0, "Examen físico:", height=2)
+        self.txt_colposcopia = add_textarea_2col(r, 2, "Colposcopia:", height=2)
         r += 2
 
         # Fila 3: Eco vaginal | Eco mamas
-        self.txt_eco_vaginal = add_textarea_2col(r, 0, "Ecografía vaginal:", height=5)
-        self.txt_eco_mamas = add_textarea_2col(r, 2, "Ecografía de mamas:", height=5)
+        self.txt_eco_vaginal = add_textarea_2col(r, 0, "Ecografía vaginal:", height=2)
+        self.txt_eco_mamas = add_textarea_2col(r, 2, "Ecografía de mamas:", height=2)
         r += 2
 
         # Fila 4: Otros paraclínicos | Diagnóstico
-        self.txt_otros_para = add_textarea_2col(r, 0, "Otros paraclínicos:", height=5)
-        self.txt_diagnostico = add_textarea_2col(r, 2, "Diagnóstico:", height=5)
+        self.txt_otros_para = add_textarea_2col(r, 0, "Otros paraclínicos:", height=2)
+        self.txt_diagnostico = add_textarea_2col(r, 2, "Diagnóstico:", height=2)
         r += 2
 
         # Fila 5: Plan (izquierda) | (vacío derecha)
-        self.txt_plan = add_textarea_2col(r, 0, "Plan:", height=5)
+        self.txt_plan = add_textarea_2col(r, 0, "Plan:", height=3)
         # placeholder derecha (no hace nada, solo mantiene grilla alineada)
         ttk.Label(frm, text=" ", style="Field.TLabel").grid(row=r, column=2, sticky="w")
         ttk.Label(frm, text=" ").grid(row=r + 1, column=2, columnspan=2, sticky="nsew")
@@ -275,16 +298,12 @@ class NewVisitWindow(tk.Toplevel):
             for w in (self.chk_pap, self.chk_md, self.chk_mi, self.cbo_biopsia):
                 w.configure(state="disabled")
 
-        # Semanas gestacionales:
+        # Edad gestacional:
         # - NUEVA CITA: preview dinámico mientras escribe (se guarda congelado al Guardar)
         # - EDITAR CITA: NO recalcular (se carga desde BD)
         if self.cita_id is None:
-            self._fum_trace = self.fum.trace_add("write", lambda *_: self._update_sg())
+            self._fum_trace = self.fum.trace_add("write", self._update_sg)
             self._update_sg()
-
-        if self.cita_id is None:
-            self._fum_trace = self.fum.trace_add("write", lambda *_: self._update_fpp())
-            self._update_fpp()
 
     def _close(self) -> None:
         # Quitar trace de FUM
@@ -304,6 +323,11 @@ class NewVisitWindow(tk.Toplevel):
 
         self.destroy()
 
+    def _normalize_fum_on_blur(self, _e: object = None) -> None:
+        d = parse_dmy_input(self.fum.get())
+        if d:
+            self.fum.set(fmt_dmy(d))
+
     def _to_int(self, v: str, *, default: int = 0) -> int:
         s = (v or "").strip()
         if not s:
@@ -314,45 +338,70 @@ class NewVisitWindow(tk.Toplevel):
             return default
 
     def _calc_sg(self, fum_text: str) -> str:
-        s = (fum_text or "").strip()
-        if not s:
+        fum_d = parse_dmy_input(fum_text)
+        if not fum_d:
             return "—"
-
-        # Parse FUM "YYYY-MM-DD"
-        try:
-            fum_d = datetime.strptime(s, "%Y-%m-%d").date()
-        except ValueError:
-            return "—"
-
-        # Fecha de referencia: HOY (date, no datetime)
         ref_d = date.today()
-
         delta_days = (ref_d - fum_d).days
         if delta_days < 0:
             return "—"
-
         weeks = delta_days // 7
         days = delta_days % 7
         return f"{weeks} semanas y {days} días"
 
     def _calc_fpp(self, fum_text: str) -> str:
-        s = (fum_text or "").strip()
-        if not s:
+        fum_d = parse_dmy_input(fum_text)
+        if not fum_d:
             return "—"
-        try:
-            fum_d = datetime.strptime(s, "%Y-%m-%d").date()
-        except ValueError:
-            return "—"
-        fpp = fum_d + timedelta(days=280)  # 40 semanas
-        return fpp.strftime("%Y-%m-%d")
+        fpp = fum_d + timedelta(days=280)
+        return fmt_dmy(fpp)
 
-    def _update_sg(self) -> None:
-        # Preview dinámico SOLO para cita nueva (porque en editar no ponemos trace_add)
+    def _update_sg(self, *_: object) -> None:
         self.sg_var.set(self._calc_sg(self.fum.get()))
+        try:
+            self.fpp_var.set(self._calc_fpp(self.fum.get()))
+        # except Exception:
+        #    # si algo falla en fpp, no rompas la UI
+        #    self.fpp_var.set("—")
 
-    def _update_fpp(self) -> None:
-        # Preview dinámico SOLO para cita nueva (porque en editar no ponemos trace_add)
-        self.fpp_var.set(self._calc_fpp(self.fum.get()))
+        except Exception as e:
+            warn(f"Error calculando FPP: {e}")
+            self.fpp_var.set("—")
+
+    # def _update_fpp(self) -> None:
+    #    # Preview dinámico SOLO para cita nueva (porque en editar no ponemos trace_add)
+    #    self.fpp_var.set(self._calc_fpp(self.fum.get()))
+
+    def _validate_dmy(self, proposed: str) -> bool:
+        # permitir vacío mientras escribe
+        if proposed == "":
+            return True
+        if len(proposed) > 10:  # dd-mm-yyyy
+            return False
+        return all(ch.isdigit() or ch == "-" for ch in proposed)
+
+    def _format_dmy_entry(self, entry: ttk.Entry) -> None:
+        txt = entry.get()
+        digits = "".join(ch for ch in txt if ch.isdigit())[:8]
+
+        if len(digits) <= 2:
+            out = digits
+        elif len(digits) <= 4:
+            out = digits[:2] + "-" + digits[2:]
+        else:
+            out = digits[:2] + "-" + digits[2:4] + "-" + digits[4:]
+
+        if out != txt:
+            pos = entry.index(tk.INSERT)
+            entry.delete(0, tk.END)
+            entry.insert(0, out)
+            entry.icursor(min(pos, len(out)))
+
+    def _normalize_dmy_entry(self, entry: ttk.Entry) -> None:
+        d = parse_dmy_input(entry.get())
+        if d:
+            entry.delete(0, tk.END)
+            entry.insert(0, fmt_dmy(d))
 
     def save(self) -> None:
         try:
@@ -491,7 +540,7 @@ class NewVisitWindow(tk.Toplevel):
     def _load_for_edit(self, cita_id: int) -> None:
         row = self.conn.execute(
             """
-            SELECT fum, g_p, g_c, g_a, g_ee, g_otros,
+            SELECT fecha_consulta, fum, g_p, g_c, g_a, g_ee, g_otros,
                 anticoncepcion, motivo_consulta, examen_fisico, colposcopia,
                 eco_vaginal, eco_mamas, otros_paraclinicos, diagnostico, plan,
                 semanas_gestacionales, fpp, forma_pago
@@ -506,6 +555,7 @@ class NewVisitWindow(tk.Toplevel):
             return
 
         # Vars
+        self.consulta_var.set(fmt_dt_ui(row["fecha_consulta"], with_time=True) or "")
         self.fum.set(row["fum"] or "")
         self.g_p.set(str(row["g_p"] or 0))
         self.g_c.set(str(row["g_c"] or 0))
@@ -557,14 +607,3 @@ class NewVisitWindow(tk.Toplevel):
                     self.var_mi.set(True)
             elif r["tipo"] == "biopsia":
                 self.biopsia.set(r["subtipo"] or "Ninguna")
-
-    def _calc_fpp(self, fum_text: str) -> str:
-        s = (fum_text or "").strip()
-        if not s:
-            return "—"
-        try:
-            fum_d = datetime.strptime(s, "%Y-%m-%d").date()
-        except ValueError:
-            return "—"
-        fpp_d = fum_d + timedelta(days=280)  # 40 semanas
-        return fpp_d.strftime("%Y-%m-%d")

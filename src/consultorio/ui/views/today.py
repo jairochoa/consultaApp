@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tkinter as tk
 from tkinter import ttk
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from tkinter import messagebox
 
 from tkcalendar import DateEntry
@@ -12,6 +12,8 @@ from consultorio.config import Settings
 from consultorio.repos.visits import VisitRepo
 from consultorio.services.reporting import counts_pending_by_status, overdue_studies
 from consultorio.ui.events import EventBus
+
+from consultorio.ui.utils.dates import fmt_dt_ui
 
 
 class TodayView(ttk.Frame):
@@ -219,7 +221,7 @@ class TodayView(ttk.Frame):
                 tags=(tag,),
                 values=(
                     idx + 1,
-                    r["fecha_consulta"],
+                    fmt_dt_ui(r["fecha_consulta"], with_time=True),
                     r["cedula"],
                     r["paciente"],
                     (r["motivo_consulta"] or "")[:100],
@@ -233,3 +235,14 @@ class TodayView(ttk.Frame):
             parent=self,
         ):
             self.root.destroy()
+
+    def _fmt_dt(self, s: str | None) -> str:
+        if not s:
+            return ""
+        try:
+            # "YYYY-MM-DD HH:MM:SS"
+            dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+            return dt.strftime("%d-%m-%Y %H:%M")
+        except Exception:
+            # fallback
+            return s

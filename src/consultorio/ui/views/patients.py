@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tkinter as tk
 from tkinter import messagebox, ttk
-from datetime import date  # arriba del archivo (imports)
+from datetime import date
 
 from consultorio.domain.rules import DomainError
 from consultorio.repos.patients import PatientRepo, PatientUpsert
@@ -11,6 +11,7 @@ from consultorio.repos.visits import VisitRepo
 from consultorio.ui.events import EventBus
 from consultorio.ui.widgets.common import error, info, warn
 from consultorio.ui.windows.new_visit import NewVisitWindow
+from consultorio.ui.utils.dates import parse_dmy_input, fmt_dt_ui
 
 
 class PatientsView(ttk.Frame):
@@ -191,19 +192,19 @@ class PatientsView(ttk.Frame):
 
         # --- Historial ---
         hist = ttk.LabelFrame(
-            bottom_box, text="Historial de citas (paciente seleccionado)", labelanchor="nw"
+            bottom_box, text="Historial de consultas (paciente seleccionada)", labelanchor="nw"
         )
         hist.pack(fill=tk.BOTH, expand=True, pady=(10, 6))
 
-        cols_h = ("fecha", "motivo", "pago")
+        cols_h = ("fecha", "motivo", "diagnostico", "plan")
         self.tree_hist = ttk.Treeview(hist, columns=cols_h, show="headings", height=6)
         self.tree_hist.bind("<Double-1>", self.open_visit_from_history)
-        # self.tree_hist.bind("<Double-1>", self._on_hist_double_click, add=True)
 
         for c, t, w in [
-            ("fecha", "Fecha", 170),
-            ("motivo", "Motivo", 520),
-            ("pago", "Pago", 120),
+            ("fecha", "Fecha", 100),
+            ("motivo", "Motivo", 120),
+            ("diagnostico", "Diagnóstico", 120),
+            ("plan", "Plan", 120),
         ]:
             self.tree_hist.heading(c, text=t, anchor="w")
             self.tree_hist.column(c, width=w, anchor="w")
@@ -215,17 +216,17 @@ class PatientsView(ttk.Frame):
 
         # --- NUEVO: Estudios del paciente ---
         studies = ttk.LabelFrame(
-            bottom_box, text="Estudios (paciente seleccionado)", labelanchor="nw"
+            bottom_box, text="Estudios (paciente seleccionada)", labelanchor="nw"
         )
         studies.pack(fill=tk.BOTH, expand=True)
 
         cols_s = ("fecha", "tipo", "subtipo", "resultado")
         self.tree_studies = ttk.Treeview(studies, columns=cols_s, show="headings", height=6)
         for c, t, w in [
-            ("fecha", "Fecha", 170),
+            ("fecha", "Fecha", 100),
             ("tipo", "Tipo", 110),
-            ("subtipo", "Subtipo", 140),
-            ("resultado", "Resultado", 520),
+            ("subtipo", "Subtipo", 110),
+            ("resultado", "Resultado del Estudio", 520),
         ]:
             self.tree_studies.heading(c, text=t, anchor="w")
             self.tree_studies.column(c, width=w, anchor="w")
@@ -257,7 +258,7 @@ class PatientsView(ttk.Frame):
                     str(r["edad"] or ""),
                     r["cedula"] or "",
                     r["telefono"] or "",
-                    (r["creado_en"] or ""),  # yyyy-mm-dd hh:mm
+                    fmt_dt_ui(r["creado_en"], with_time=True),  # yyyy-mm-dd hh:mm
                 ),
             )
 
@@ -289,7 +290,12 @@ class PatientsView(ttk.Frame):
                 "end",
                 iid=str(r["cita_id"]),  # 👈 clave
                 tags=(tag,),
-                values=(r["fecha_consulta"], (r["motivo_consulta"] or "")[:120], r["forma_pago"]),
+                values=(
+                    fmt_dt_ui(r["fecha_consulta"], with_time=True),
+                    (r["motivo_consulta"] or "")[:120],
+                    (r["diagnostico"] or ""),
+                    (r["plan"] or ""),
+                ),
             )
 
     # ---------------- Estudios ----------------
@@ -318,7 +324,7 @@ class PatientsView(ttk.Frame):
             self.tree_studies.insert(
                 "",
                 "end",
-                values=(r["fecha"], r["tipo"], r["subtipo"], res[:250]),
+                values=(fmt_dt_ui(r["fecha"], with_time=True), r["tipo"], r["subtipo"], res[:250]),
             )
 
     # ---------------- Form helpers ----------------
@@ -740,12 +746,37 @@ class PatientsView(ttk.Frame):
         return len(s) <= 10 and all(ch.isdigit() or ch == "-" for ch in s)
 
     def _fmt_date(self, s: str) -> str:
-        # no convierto nada, solo dejo lo que escribió (puedes mejorar luego)
+        # acepta ddmmyyyy o dd-mm-yyyy -> devuelve dd-mm-yyyy si es válido
+        digits = "".join(ch for ch in (s or "") if ch.isdigit())
+        if len(digits) == 8:
+            dd, mm, yyyy = digits[0:2], digits[2:4], digits[4:8]
+            try:
+                date(int(yyyy), int(mm), int(dd))  # valida fecha
+                return f"{dd}-{mm}-{yyyy}"
+            except Exception:
+                return s
         return s
 
     def _parse_birthdate(self, s: str) -> date | None:
         s = (s or "").strip()
         if not s:
+            return None
+
+        # si está el placeholder activo, no calcular
+        if hasattr(self, "ent_fnac") and getattr(self.ent_fnac, "_ph_on", False):
+            return None
+
+        digits = "".join(ch for ch in s if ch.isdigit())
+        if len(digits) != 8:
+            return None
+
+        dd = int(digits[0:2])
+        mm = int(digits[2:4])
+        yyyy = int(digits[4:8])
+
+        try:
+            return date(yyyy, mm, dd)
+        except Exception:
             return None
 
         # si está el placeholder activo, no calcular

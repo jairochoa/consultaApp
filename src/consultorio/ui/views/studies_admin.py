@@ -12,6 +12,8 @@ from consultorio.ui.events import EventBus
 from consultorio.ui.widgets.common import error, info, warn
 from consultorio.ui.windows.edit_result import EditResultWindow
 
+from consultorio.ui.utils.dates import fmt_dt_ui
+
 
 STATUS_COLS = ["enviado", "pagado", "recibido", "entregado"]
 
@@ -478,7 +480,7 @@ class StudiesAdminView(ttk.Frame):
                 tags=(tag,),
                 values=(
                     idx + 1,
-                    r["fecha_cita"] if r["fecha_cita"] else "Sin fecha",
+                    fmt_dt_ui(r["fecha_cita"], with_time=False) if r["fecha_cita"] else "Sin fecha",
                     r["cedula"],
                     r["paciente"],
                     r["tipo"],

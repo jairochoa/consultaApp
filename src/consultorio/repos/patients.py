@@ -7,6 +7,27 @@ from datetime import datetime
 from consultorio.domain.rules import DomainError, validate_cedula
 
 
+def _normalize_dmy(s: str | None) -> str | None:
+    """
+    Acepta: 'ddmmyyyy' o 'dd-mm-yyyy' (o con espacios)
+    Devuelve: 'dd-mm-yyyy' o None si vacío/invalid.
+    """
+    if not s:
+        return None
+    digits = "".join(ch for ch in str(s) if ch.isdigit())
+    if len(digits) != 8:
+        # si ya viene como dd-mm-yyyy, lo dejamos si calza 10 y tiene guiones
+        t = str(s).strip()
+        return t if len(t) == 10 and t[2] == "-" and t[5] == "-" else None
+
+    dd, mm, yyyy = digits[0:2], digits[2:4], digits[4:8]
+    try:
+        datetime(int(yyyy), int(mm), int(dd))  # valida fecha
+    except ValueError:
+        return None
+    return f"{dd}-{mm}-{yyyy}"
+
+
 def _now_iso() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -35,9 +56,11 @@ class PatientRepo:
         edad_sql = """
         CASE
         WHEN fecha_nacimiento IS NULL OR trim(fecha_nacimiento) = '' THEN NULL
-        WHEN length(trim(fecha_nacimiento)) != 10 THEN NULL
-        WHEN substr(fecha_nacimiento, 3, 1) != '-' OR substr(fecha_nacimiento, 6, 1) != '-' THEN NULL
-        ELSE
+
+        -- Caso 1: dd-mm-yyyy
+        WHEN length(trim(fecha_nacimiento)) = 10
+            AND substr(fecha_nacimiento, 3, 1) = '-'
+            AND substr(fecha_nacimiento, 6, 1) = '-' THEN
             (
             CAST(strftime('%Y','now') AS INT) - CAST(substr(fecha_nacimiento, 7, 4) AS INT)
             - (
@@ -45,6 +68,23 @@ class PatientRepo:
                 < (substr(fecha_nacimiento, 4, 2) || '-' || substr(fecha_nacimiento, 1, 2))
                 )
             )
+
+        -- Caso 2: ddmmyyyy (8 dígitos)
+        WHEN length(replace(replace(trim(fecha_nacimiento), '-', ''), ' ', '')) = 8 THEN
+            (
+            CAST(strftime('%Y','now') AS INT) -
+            CAST(substr(replace(replace(trim(fecha_nacimiento), '-', ''), ' ', ''), 5, 4) AS INT)
+            - (
+                strftime('%m-%d','now')
+                < (
+                    substr(replace(replace(trim(fecha_nacimiento), '-', ''), ' ', ''), 3, 2)
+                    || '-' ||
+                    substr(replace(replace(trim(fecha_nacimiento), '-', ''), ' ', ''), 1, 2)
+                    )
+                )
+            )
+
+        ELSE NULL
         END AS edad
         """
 
@@ -93,6 +133,7 @@ class PatientRepo:
         ).fetchone()
 
     def create(self, p: PatientUpsert) -> int:
+        fn = _normalize_dmy(p.fecha_nacimiento)
         validate_cedula(p.cedula)
         if not p.nombres.strip() or not p.apellidos.strip():
             raise DomainError("Nombres y apellidos son requeridos.")
@@ -110,7 +151,7 @@ class PatientRepo:
                 p.apellidos.strip(),
                 p.comentario.strip(),
                 (p.telefono or "").strip(),
-                p.fecha_nacimiento,
+                fn,
                 (p.domicilio or "").strip(),
                 (p.antecedentes_personales or "").strip(),
                 (p.antecedentes_familiares or "").strip(),
@@ -121,6 +162,7 @@ class PatientRepo:
         return int(cur.lastrowid)
 
     def update(self, p: PatientUpsert) -> None:
+        fn = _normalize_dmy(p.fecha_nacimiento)
         if not p.paciente_id:
             raise DomainError("paciente_id requerido para actualizar.")
         validate_cedula(p.cedula)
@@ -140,7 +182,7 @@ class PatientRepo:
                 p.apellidos.strip(),
                 p.comentario.strip(),
                 (p.telefono or "").strip(),
-                p.fecha_nacimiento,
+                fn,
                 (p.domicilio or "").strip(),
                 (p.antecedentes_personales or "").strip(),
                 (p.antecedentes_familiares or "").strip(),

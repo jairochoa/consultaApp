@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-
 import yaml
+import sys
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class DashboardConfig:
 
 @dataclass(frozen=True)
 class AppConfig:
-    title: str = "Consultorio - Offline"
+    title: str = "MiConsulta - YDRM"
     locale: str = "es_VE"
 
 
@@ -49,12 +49,23 @@ class Settings:
     dashboard: DashboardConfig
 
 
-def _as_path(p: str) -> Path:
-    return Path(p).resolve()
+def _as_path(p: str, base: Path) -> Path:
+    pp = Path(p)
+    return (base / pp).resolve() if not pp.is_absolute() else pp.resolve()
+
+
+def _app_root() -> Path:
+    # En PyInstaller: sys._MEIPASS apunta al bundle. En dev: carpeta del repo.
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    return Path(__file__).resolve().parents[2]  # ajusta si tu estructura difiere
 
 
 def load_config(path: str | Path = "config/config.yaml") -> Settings:
-    with open(path, "r", encoding="utf-8") as f:
+    base = _app_root()
+    cfg_path = (base / path).resolve() if not isinstance(path, Path) else path.resolve()
+
+    with open(cfg_path, "r", encoding="utf-8") as f:
         raw: dict[str, Any] = yaml.safe_load(f) or {}
 
     app_raw = raw.get("app", {}) or {}
@@ -78,8 +89,8 @@ def load_config(path: str | Path = "config/config.yaml") -> Settings:
     )
 
     storage = StorageConfig(
-        db_path=_as_path(storage_raw.get("db_path", "./data/consultorio.db")),
-        backups_dir=_as_path(storage_raw.get("backups_dir", "./backups")),
+        db_path=_as_path(storage_raw.get("db_path", "./data/consultorio.db"), base),
+        backups_dir=_as_path(storage_raw.get("backups_dir", "./backups"), base),
         wal_mode=bool(storage_raw.get("wal_mode", True)),
     )
 
