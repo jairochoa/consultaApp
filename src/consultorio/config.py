@@ -31,6 +31,11 @@ class ClinicConfig:
 
 
 @dataclass(frozen=True)
+class AlternativePathsConfig:
+    logo: Path | None = None
+
+
+@dataclass(frozen=True)
 class DashboardConfig:
     overdue_days: int = 30
 
@@ -47,6 +52,7 @@ class Settings:
     storage: StorageConfig
     clinic: ClinicConfig
     dashboard: DashboardConfig
+    alternative_paths: AlternativePathsConfig
 
 
 def _as_path(p: str, base: Path) -> Path:
@@ -72,6 +78,7 @@ def load_config(path: str | Path = "config/config.yaml") -> Settings:
     storage_raw = raw.get("storage", {}) or {}
     clinic_raw = raw.get("clinic", {}) or {}
     dash_raw = raw.get("dashboard", {}) or {}
+    alternative_raw = raw.get("alternative", {}) or {}
 
     limits_raw = clinic_raw.get("limits", {}) or {}
     limits = ClinicLimits(
@@ -94,9 +101,15 @@ def load_config(path: str | Path = "config/config.yaml") -> Settings:
         wal_mode=bool(storage_raw.get("wal_mode", True)),
     )
 
+    alternative_paths = AlternativePathsConfig(
+        logo=_as_path(alternative_raw.get("logo", "src/consultorio/assets/logo.png"), base)
+    )
+
     dash = DashboardConfig(overdue_days=int(dash_raw.get("overdue_days", 30)))
     app = AppConfig(
         title=str(app_raw.get("title", "Consultorio - Offline")),
         locale=str(app_raw.get("locale", "es_VE")),
     )
-    return Settings(app=app, storage=storage, clinic=clinic, dashboard=dash)
+    return Settings(
+        app=app, storage=storage, clinic=clinic, dashboard=dash, alternative_paths=alternative_paths
+    )

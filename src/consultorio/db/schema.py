@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from passlib.hash import pbkdf2_sha256
 
 
 _SCHEMA: list[str] = [
@@ -77,6 +78,16 @@ _SCHEMA: list[str] = [
         FOREIGN KEY (paciente_id) REFERENCES pacientes(paciente_id) ON DELETE RESTRICT,
         FOREIGN KEY (centro_id) REFERENCES centros_histologicos(centro_id) ON DELETE SET NULL
     );""",
+    """CREATE TABLE IF NOT EXISTS usuarios (
+        user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('admin','medico')),
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_login TEXT
+    );""",
+    """CREATE INDEX IF NOT EXISTS idx_usuarios_username ON usuarios(username);""",
     """CREATE INDEX IF NOT EXISTS idx_estudios_estado_actual ON estudios(estado_actual);""",
     """CREATE INDEX IF NOT EXISTS idx_estudios_paciente ON estudios(paciente_id);""",
     """CREATE INDEX IF NOT EXISTS idx_estudios_cita ON estudios(cita_id);""",
@@ -119,6 +130,16 @@ def migrate(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "citas", "plan", "plan TEXT")
     _ensure_column(conn, "citas", "semanas_gestacionales", "semanas_gestacionales TEXT")
     _ensure_column(conn, "citas", "fpp", "fpp TEXT")
+
+    # asegurar admin inicial si no existe ningún usuario
+    row = conn.execute("SELECT COUNT(1) AS n FROM usuarios").fetchone()
+    n = int(row["n"]) if row else 0
+    if n == 0:
+        conn.execute(
+            "INSERT INTO usuarios (username, password_hash, role) VALUES (?,?,?)",
+            ("admin", pbkdf2_sha256.hash("admin123"), "admin"),
+        )
+        conn.commit()
 
     # Opcional: índice para performance en listados
     conn.execute("CREATE INDEX IF NOT EXISTS idx_estudios_ordenado_en ON estudios(ordenado_en)")

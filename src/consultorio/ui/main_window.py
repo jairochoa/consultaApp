@@ -11,9 +11,22 @@ from consultorio.ui.views.today import TodayView
 from consultorio.ui.views.patients import PatientsView
 from consultorio.ui.views.studies_admin import StudiesAdminView
 
+from consultorio.repos.auth import AuthRepo
+from consultorio.ui.windows.users_admin import UsersAdminWindow
 
-def run_main_window(cfg: Settings, conn: sqlite3.Connection) -> None:
+
+def run_main_window(cfg: Settings, conn: sqlite3.Connection, *, current_user):
     root = tk.Tk()
+
+    menubar = tk.Menu(root)
+    root.config(menu=menubar)
+
+    if getattr(current_user, "role", "") == "admin":
+        admin_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Admin", menu=admin_menu)
+        auth = AuthRepo(conn)
+        admin_menu.add_command(label="Usuarios…", command=lambda: UsersAdminWindow(root, auth))
+
     root.title(cfg.app.title)
     root.geometry("1100x700")
 
