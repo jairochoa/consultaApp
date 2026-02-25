@@ -290,16 +290,25 @@ class NewVisitWindow(tk.Toplevel):
 
         if self.cita_id is not None:
             self._load_for_edit(self.cita_id)
-            self.ent_fum.configure(state="disabled")
+            # AHORA SÍ SE PUEDE EDITAR:
+            self.ent_fum.configure(state="normal")
             for w in (self.chk_pap, self.chk_md, self.chk_mi, self.cbo_biopsia):
-                w.configure(state="disabled")
+                w.configure(state="normal")
+
+            # si quieres preview dinámico también en edición:
+            self._fum_trace = self.fum.trace_add("write", lambda *_: self._update_sg())
+            self._update_sg()
+        else:
+            # NUEVA CITA
+            self._fum_trace = self.fum.trace_add("write", lambda *_: self._update_sg())
+            self._update_sg()
 
         # Edad gestacional:
         # - NUEVA CITA: preview dinámico mientras escribe (se guarda congelado al Guardar)
         # - EDITAR CITA: NO recalcular (se carga desde BD)
-        if self.cita_id is None:
-            self._fum_trace = self.fum.trace_add("write", self._update_sg)
-            self._update_sg()
+        # if self.cita_id is None:
+        #     self._fum_trace = self.fum.trace_add("write", self._update_sg)
+        #     self._update_sg()
 
         self.after(50, self._autosize_to_content)
 
@@ -432,10 +441,17 @@ class NewVisitWindow(tk.Toplevel):
             # ========= EDITAR =========
             # Importante: NO tocar semanas_gestacionales aquí (queda congelada)
             if self.cita_id is not None:
+                sg_text = self._calc_sg(self.fum.get())
+                fpp_text = self._calc_fpp(self.fum.get())
+
+                sg_db = None if (not sg_text or sg_text == "—") else sg_text
+                fpp_db = None if (not fpp_text or fpp_text == "—") else fpp_text
+
                 self.conn.execute(
                     """
                     UPDATE citas
-                    SET g_p=?, g_c=?, g_a=?, g_ee=?, g_otros=?,
+                    SET fum=?, semanas_gestacionales=?, fpp=?,
+                        g_p=?, g_c=?, g_a=?, g_ee=?, g_otros=?,
                         anticoncepcion=?,
                         motivo_consulta=?,
                         examen_fisico=?,
@@ -450,6 +466,9 @@ class NewVisitWindow(tk.Toplevel):
                     WHERE cita_id=?
                     """,
                     (
+                        self.fum.get().strip(),
+                        sg_db,
+                        fpp_db,
                         self._to_int(self.g_p.get()),
                         self._to_int(self.g_c.get()),
                         self._to_int(self.g_a.get()),
@@ -470,10 +489,14 @@ class NewVisitWindow(tk.Toplevel):
                 )
                 self.conn.commit()
 
+                self._save_studies_for_visit(self.cita_id)
+
                 self.bus.publish("visits")
+                self.bus.publish("studies")
                 info(f"Cita actualizada (ID: {self.cita_id}).")
                 self.destroy()
                 return
+
             # ========= FIN EDITAR =========
 
             # ========= CREAR =========
@@ -629,3 +652,73 @@ class NewVisitWindow(tk.Toplevel):
                     self.var_mi.set(True)
             elif r["tipo"] == "biopsia":
                 self.biopsia.set(r["subtipo"] or "Ninguna")
+
+    def _save_studies_for_visit(self, cita_id: int) -> None:
+        # 1) lo que el usuario seleccionó en UI
+        selected_citos: set[str] = set()
+        if self.var_pap.get():
+            selected_citos.add("PAP")
+        if self.var_md.get():
+            selected_citos.add("MD")
+        if self.var_mi.get():
+            selected_citos.add("MI")
+
+        bio = (self.biopsia.get() or "").strip()
+        selected_bio: str | None = None if (not bio or bio == "Ninguna") else bio
+
+        # 2) lo que existe en BD para esta cita
+        rows = self.conn.execute(
+            "SELECT estudio_id, tipo, subtipo FROM estudios WHERE cita_id=?",
+            (cita_id,),
+        ).fetchall()
+
+        existing_citos: dict[str, int] = {}
+        existing_bio: dict[str, int] = {}
+
+        for r in rows:
+            if r["tipo"] == "citologia":
+                existing_citos[str(r["subtipo"])] = int(r["estudio_id"])
+            elif r["tipo"] == "biopsia":
+                existing_bio[str(r["subtipo"])] = int(r["estudio_id"])
+
+        # 3) eliminar citologías que ya no están seleccionadas
+        for subtipo, estudio_id in existing_citos.items():
+            if subtipo not in selected_citos:
+                self.conn.execute("DELETE FROM estudios WHERE estudio_id=?", (estudio_id,))
+
+        # 4) insertar citologías nuevas
+        for subtipo in selected_citos:
+            if subtipo not in existing_citos:
+                self.studies.create(
+                    StudyCreate(
+                        cita_id=cita_id,
+                        paciente_id=self.paciente_id,
+                        tipo="citologia",
+                        subtipo=subtipo,
+                        centro_id=None,
+                        estado_actual="ordenado",
+                    )
+                )
+
+        # 5) biopsia: si cambió, eliminar las existentes y crear la nueva
+        if selected_bio is None:
+            # quitar cualquier biopsia previa
+            for _, estudio_id in existing_bio.items():
+                self.conn.execute("DELETE FROM estudios WHERE estudio_id=?", (estudio_id,))
+        else:
+            # si hay una distinta, eliminar todas y crear una
+            if selected_bio not in existing_bio or len(existing_bio) != 1:
+                for _, estudio_id in existing_bio.items():
+                    self.conn.execute("DELETE FROM estudios WHERE estudio_id=?", (estudio_id,))
+                self.studies.create(
+                    StudyCreate(
+                        cita_id=cita_id,
+                        paciente_id=self.paciente_id,
+                        tipo="biopsia",
+                        subtipo=selected_bio,
+                        centro_id=None,
+                        estado_actual="ordenado",
+                    )
+                )
+
+        self.conn.commit()
