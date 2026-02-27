@@ -130,6 +130,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "citas", "plan", "plan TEXT")
     _ensure_column(conn, "citas", "semanas_gestacionales", "semanas_gestacionales TEXT")
     _ensure_column(conn, "citas", "fpp", "fpp TEXT")
+    _ensure_column(conn, "citas", "g_g", "g_g INTEGER DEFAULT 0")
 
     # asegurar admin inicial si no existe ningún usuario
     row = conn.execute("SELECT COUNT(1) AS n FROM usuarios").fetchone()

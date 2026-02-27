@@ -65,6 +65,7 @@ class VisitCreate:
     paciente_id: int
     fecha_consulta: str | None = None  # ISO "YYYY-MM-DD HH:MM:SS"
     fum: str = ""
+    g_g: int = 0
     g_p: int = 0
     g_c: int = 0
     g_a: int = 0
@@ -104,15 +105,16 @@ class VisitCrud:
 
         cur = self.conn.execute(
             """INSERT INTO citas
-            (paciente_id, fecha_consulta, fum, g_p, g_c, g_a, g_ee, g_otros,
+            (paciente_id, fecha_consulta, fum,  g_g, g_p, g_c, g_a, g_ee, g_otros,
                 anticoncepcion, motivo_consulta, examen_fisico, colposcopia,
                 eco_vaginal, eco_mamas, otros_paraclinicos, diagnostico, plan,
                 semanas_gestacionales, fpp, forma_pago, actualizado_en)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 v.paciente_id,
                 fecha,
                 clean_opt(v.fum),
+                int(v.g_g),
                 int(v.g_p),
                 int(v.g_c),
                 int(v.g_a),

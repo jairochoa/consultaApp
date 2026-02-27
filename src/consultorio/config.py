@@ -113,3 +113,20 @@ def load_config(path: str | Path = "config/config.yaml") -> Settings:
     return Settings(
         app=app, storage=storage, clinic=clinic, dashboard=dash, alternative_paths=alternative_paths
     )
+
+
+def app_base_dir() -> Path:
+    # PyInstaller onedir: sys._MEIPASS == ...\dist\consultorio\_internal
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    # Dev: ...\src\consultorio\config.py -> subir a raíz del proyecto
+    return Path(__file__).resolve().parents[2]
+
+
+def resolve_app_path(rel_or_abs: str | None) -> Path | None:
+    if not rel_or_abs:
+        return None
+    p = Path(str(rel_or_abs))
+    if p.is_absolute():
+        return p
+    return app_base_dir() / p

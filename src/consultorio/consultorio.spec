@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['src\\consultorio\\__main__.py'],
+    ['__main__.py'],
     pathex=['src'],
     binaries=[],
-    datas=[('config\\config.yaml', 'config'), ('src\\consultorio\\assets', 'assets')],
+    datas=[('..\\consultaApp\\config\\config.yaml', '.'), ('assets', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -21,7 +21,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='MiConsulta',
+    name='consultorio',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -40,5 +40,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='MiConsulta',
+    name='consultorio',
 )

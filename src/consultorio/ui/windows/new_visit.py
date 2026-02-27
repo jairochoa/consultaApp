@@ -81,6 +81,7 @@ class NewVisitWindow(tk.Toplevel):
 
         # --- Vars ---
         self.fum = tk.StringVar()
+        self.g_g = tk.StringVar(value="0")
         self.g_p = tk.StringVar(value="0")
         self.g_c = tk.StringVar(value="0")
         self.g_a = tk.StringVar(value="0")
@@ -161,6 +162,7 @@ class NewVisitWindow(tk.Toplevel):
 
         # Matriz ordenada: (label, var)
         gestas = [
+            ("G", self.g_g),
             ("P", self.g_p),
             ("C", self.g_c),
             ("A", self.g_a),
@@ -450,7 +452,7 @@ class NewVisitWindow(tk.Toplevel):
                 self.conn.execute(
                     """
                     UPDATE citas
-                    SET fum=?, semanas_gestacionales=?, fpp=?,
+                    SET fum=?, semanas_gestacionales=?, fpp=?, g_g=?,
                         g_p=?, g_c=?, g_a=?, g_ee=?, g_otros=?,
                         anticoncepcion=?,
                         motivo_consulta=?,
@@ -469,6 +471,7 @@ class NewVisitWindow(tk.Toplevel):
                         self.fum.get().strip(),
                         sg_db,
                         fpp_db,
+                        self._to_int(self.g_g.get()),
                         self._to_int(self.g_p.get()),
                         self._to_int(self.g_c.get()),
                         self._to_int(self.g_a.get()),
@@ -510,6 +513,7 @@ class NewVisitWindow(tk.Toplevel):
             v = VisitCreate(
                 paciente_id=self.paciente_id,
                 fum=self.fum.get().strip(),
+                g_g=self._to_int(self.g_g.get()),
                 g_p=self._to_int(self.g_p.get()),
                 g_c=self._to_int(self.g_c.get()),
                 g_a=self._to_int(self.g_a.get()),
@@ -585,7 +589,7 @@ class NewVisitWindow(tk.Toplevel):
     def _load_for_edit(self, cita_id: int) -> None:
         row = self.conn.execute(
             """
-            SELECT fecha_consulta, fum, g_p, g_c, g_a, g_ee, g_otros,
+            SELECT fecha_consulta, fum, g_g, g_p, g_c, g_a, g_ee, g_otros,
                 anticoncepcion, motivo_consulta, examen_fisico, colposcopia,
                 eco_vaginal, eco_mamas, otros_paraclinicos, diagnostico, plan,
                 semanas_gestacionales, fpp, forma_pago
@@ -602,6 +606,7 @@ class NewVisitWindow(tk.Toplevel):
         # Vars
         self.consulta_var.set(fmt_dt_ui(row["fecha_consulta"], with_time=True) or "")
         self.fum.set(row["fum"] or "")
+        self.g_g.set(str(row["g_g"] or 0))
         self.g_p.set(str(row["g_p"] or 0))
         self.g_c.set(str(row["g_c"] or 0))
         self.g_a.set(str(row["g_a"] or 0))

@@ -32,4 +32,4 @@ dashboard:
   overdue_days: 30
 
 alternative_paths:
-  logo: "./assets/logo.png"
+  logo: "assets/logo.png"

@@ -3,10 +3,10 @@
 
 a = Analysis(
     ['src\\consultorio\\__main__.py'],
-    pathex=[],
+    pathex=['src'],
     binaries=[],
-    datas=[('config', 'config')],
-    hiddenimports=['tkcalendar'],
+    datas=[('config\\config.yaml', 'config'), ('src\\consultorio\\assets', 'assets')],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -21,7 +21,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='Consultorio',
+    name='consultorio',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -40,5 +40,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='Consultorio',
+    name='consultorio',
 )
