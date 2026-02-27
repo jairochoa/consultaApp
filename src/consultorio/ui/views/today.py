@@ -12,6 +12,8 @@ from consultorio.config import Settings
 from consultorio.repos.visits import VisitRepo
 from consultorio.services.reporting import counts_pending_by_status, overdue_studies
 from consultorio.ui.events import EventBus
+from pathlib import Path
+from consultorio.db.backup import make_encrypted_backup
 
 from consultorio.ui.utils.dates import fmt_dt_ui
 
@@ -81,8 +83,33 @@ class TodayView(ttk.Frame):
         )
         ttk.Button(top, text="Este trimestre", command=self._set_this_quarter).pack(side=tk.LEFT)
 
-        ttk.Button(top, text="Salir", command=self._safe_exit).pack(side=tk.LEFT, padx=(16, 0))
+        tk.Button(
+            top,
+            text="Respaldar",
+            command=self._backup_now,
+            bg="#2e7d32",
+            fg="white",
+            activebackground="#256428",
+            activeforeground="white",
+            relief="flat",
+            padx=14,
+            pady=6,
+            cursor="hand2",
+        ).pack(side=tk.LEFT, padx=(16, 8))
 
+        tk.Button(
+            top,
+            text="Salir",
+            command=self._safe_exit,
+            bg="#c62828",
+            fg="white",
+            activebackground="#a61f1f",
+            activeforeground="white",
+            relief="flat",
+            padx=14,
+            pady=6,
+            cursor="hand2",
+        ).pack(side=tk.LEFT, padx=(0, 0))
         # --- Paned vertical: Citas arriba / Panel inferior por definir ---
         pan = ttk.PanedWindow(self, orient=tk.VERTICAL)
         pan.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
@@ -121,19 +148,19 @@ class TodayView(ttk.Frame):
         self.tree.tag_configure("even", background="#d0c3f1")
         self.tree.tag_configure("odd", background="#d7d1e2")
 
-        # --- Panel inferior (placeholder) ---
-        self.bottom = ttk.LabelFrame(
-            bottom_container,
-            text="(Por definir)",
-            style="Inferior.TLabelframe",
-            labelanchor="nw",
-        )
-        self.bottom.pack(fill=tk.BOTH, expand=True)
+        # # --- Panel inferior (placeholder) ---
+        # self.bottom = ttk.LabelFrame(
+        #     bottom_container,
+        #     text="(Por definir)",
+        #     style="Inferior.TLabelframe",
+        #     labelanchor="nw",
+        # )
+        # self.bottom.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(
-            self.bottom,
-            text="Este panel lo definimos después (alertas, notas, resumen, etc.).",
-        ).pack(anchor="w", padx=10, pady=10)
+        # ttk.Label(
+        #     self.bottom,
+        #     text="Este panel lo definimos después (alertas, notas, resumen, etc.).",
+        # ).pack(anchor="w", padx=10, pady=10)
 
         self.refresh()
 
@@ -228,10 +255,63 @@ class TodayView(ttk.Frame):
                 ),
             )
 
+    def _backup_now(self) -> None:
+        try:
+            alt = getattr(self.cfg, "alternative_paths", None)
+
+            drive_dir = getattr(alt, "drive_backups_dir", None) if alt else None
+            key_path_cfg = (
+                getattr(alt, "backup_key_path", "./config/backup.key")
+                if alt
+                else "./config/backup.key"
+            )
+
+            # --- resolver rutas relativas de forma segura ---
+            # 1) directorio base: donde está corriendo el exe (o el repo en dev)
+            base_dir = Path(getattr(self.cfg.storage, "app_base_dir", ".")).resolve()
+
+            # 2) backups_dir viene de cfg.storage.backups_dir (puede ser relativo)
+            backups_dir = Path(self.cfg.storage.backups_dir)
+            if not backups_dir.is_absolute():
+                backups_dir = (base_dir / backups_dir).resolve()
+
+            # 3) key_path (puede ser relativo)
+            key_path = Path(str(key_path_cfg))
+            if not key_path.is_absolute():
+                key_path = (base_dir / key_path).resolve()
+
+            # 4) drive_dir (opcional; si viene, puede ser relativo)
+            drive_path = None
+            if drive_dir:
+                d = Path(str(drive_dir))
+                drive_path = d if d.is_absolute() else (base_dir / d).resolve()
+
+            r = make_encrypted_backup(
+                self.conn,
+                backups_dir=backups_dir,  # <- Path OK (por el fix de tipos)
+                key_path=key_path,  # <- Path OK
+                drive_dir=drive_path,  # <- Path|None OK
+                keep_days=15,
+            )
+
+            msg = f"Respaldo cifrado creado:\n{r.local_path}"
+            if r.drive_path:
+                msg += f"\n\nCopiado a Google Drive:\n{r.drive_path}"
+            else:
+                msg += "\n\n(Nota) No se copió a Drive. Revisa drive_backups_dir en config.yaml."
+
+            messagebox.showinfo("Respaldo", msg, parent=self)
+
+        except Exception as e:
+            messagebox.showerror("Respaldo", f"No se pudo crear el respaldo:\n{e}", parent=self)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"No se pudo crear el respaldo:\n{e}", parent=self)
+
     def _safe_exit(self) -> None:
         if messagebox.askyesno(
             "Confirmar salida",
-            "¿Deseas salir del sistema?\n\nRecuerda: Guarda una copia de seguridad después de salir.",
+            "¿Deseas salir del sistema?\n\nRecuerda: Guarda una copia de seguridad antes de salir.",
             parent=self,
         ):
             self.root.destroy()

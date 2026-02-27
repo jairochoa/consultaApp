@@ -33,3 +33,5 @@ dashboard:
 
 alternative_paths:
   logo: "assets/logo.png"
+  drive_backups_dir: "G:/Mi unidad/MiConsultaBackups"
+  backup_key_path: "./config/backup.key"
