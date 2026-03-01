@@ -33,6 +33,8 @@ class ClinicConfig:
 @dataclass(frozen=True)
 class AlternativePathsConfig:
     logo: Path | None = None
+    drive_backups_dir: str | None = None
+    backup_key_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,7 +80,8 @@ def load_config(path: str | Path = "config/config.yaml") -> Settings:
     storage_raw = raw.get("storage", {}) or {}
     clinic_raw = raw.get("clinic", {}) or {}
     dash_raw = raw.get("dashboard", {}) or {}
-    alternative_raw = raw.get("alternative", {}) or {}
+    # alternative_raw = raw.get("alternative", {}) or {}
+    alternative_raw = raw.get("alternative_paths", {}) or raw.get("alternative", {}) or {}
 
     limits_raw = clinic_raw.get("limits", {}) or {}
     limits = ClinicLimits(
@@ -101,13 +104,16 @@ def load_config(path: str | Path = "config/config.yaml") -> Settings:
         wal_mode=bool(storage_raw.get("wal_mode", True)),
     )
 
+    logo_raw = str(alternative_raw.get("logo", "assets/logo.png"))
     alternative_paths = AlternativePathsConfig(
-        logo=_as_path(alternative_raw.get("logo", "src/consultorio/assets/logo.png"), base)
+        logo=resolve_app_path(logo_raw),  # <- usa base del exe, NO _MEIPASS
+        drive_backups_dir=str(alternative_raw.get("drive_backups_dir", "") or "") or None,
+        backup_key_path=str(alternative_raw.get("backup_key_path", "config/backup.key")),
     )
 
     dash = DashboardConfig(overdue_days=int(dash_raw.get("overdue_days", 30)))
     app = AppConfig(
-        title=str(app_raw.get("title", "Consultorio - Offline")),
+        title=str(app_raw.get("title", "MiConsulta - YDRM")),
         locale=str(app_raw.get("locale", "es_VE")),
     )
     return Settings(

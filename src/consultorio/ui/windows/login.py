@@ -3,12 +3,15 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 from pathlib import Path
+import sys
 
 from PIL import Image, ImageTk, ImageDraw  # Pillow
 
 from consultorio.config import load_config
 from consultorio.repos.auth import AuthRepo, User
 from consultorio.ui.widgets.common import warn
+
+import os
 
 
 class LoginWindow(tk.Toplevel):
@@ -148,17 +151,24 @@ class LoginWindow(tk.Toplevel):
         self.bind("<Return>", lambda _e: self._login())
         self.bind("<Escape>", lambda _e: self._cancel())
 
+    def _resolve_runtime_path(self, rel: str | Path) -> Path:
+        p = Path(rel)
+        if p.is_absolute():
+            return p
+        # En PyInstaller onedir, lo normal es que assets esté al lado del exe
+        if getattr(sys, "frozen", False):
+            base = Path(sys.executable).resolve().parent
+        else:
+            base = Path(__file__).resolve().parent.parent
+        return (base / p).resolve()
+
     def _load_logo_from_config(
         self, parent: ttk.Frame, *, max_px: int = 96, center: bool = True
     ) -> None:
 
         # 1. Intentar sacar la ruta de la config, si no existe, usar el fallback
-        alt_paths = getattr(self.cfg, "alternative_paths", None)
-        logo_path = (
-            getattr(alt_paths, "logo", "assets/logo.png") if alt_paths else "assets/logo.png"
-        )
-
-        path = Path(str(logo_path))
+        logo_path = getattr(getattr(self.cfg, "alternative_paths", None), "logo", "assets/logo.png")
+        path = self._resolve_runtime_path(logo_path)
 
         # 2. Verificar existencia y reportar ruta absoluta si falla
         if not path.exists():

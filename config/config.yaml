@@ -32,6 +32,6 @@ dashboard:
   overdue_days: 30
 
 alternative_paths:
-  logo: "assets/logo.png"
+  logo: "src/consultorio/assets/logo.png"
   drive_backups_dir: "G:/Mi unidad/MiConsultaBackups"
   backup_key_path: "./config/backup.key"

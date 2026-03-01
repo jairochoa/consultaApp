@@ -113,6 +113,7 @@ def make_encrypted_backup(
     drive_path: Optional[Path] = None
     if drive_dir:
         ddir = Path(drive_dir)
+        ddir.mkdir(parents=True, exist_ok=True)
         if ddir.exists():
             drive_path = ddir / enc_path.name
             drive_path.parent.mkdir(parents=True, exist_ok=True)

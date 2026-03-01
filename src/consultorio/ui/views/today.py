@@ -286,6 +286,8 @@ class TodayView(ttk.Frame):
                 d = Path(str(drive_dir))
                 drive_path = d if d.is_absolute() else (base_dir / d).resolve()
 
+            print("DRIVE_DIR CFG =", drive_dir)
+
             r = make_encrypted_backup(
                 self.conn,
                 backups_dir=backups_dir,  # <- Path OK (por el fix de tipos)

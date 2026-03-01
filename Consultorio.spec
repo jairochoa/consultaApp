@@ -5,7 +5,7 @@ a = Analysis(
     ['src\\consultorio\\__main__.py'],
     pathex=['src'],
     binaries=[],
-    datas=[('config\\config.yaml', 'config'), ('src\\consultorio\\assets', 'assets')],
+    datas=[('config\\config.yaml', 'config'), ('src\\consultorio\\assets', 'src\\consultorio\\assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
