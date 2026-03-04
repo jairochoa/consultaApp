@@ -165,9 +165,9 @@ class StudyRepo:
         if not row:
             raise DomainError("Estudio no encontrado.")
 
-        if state == "ordenado":
-            # No permitimos quitar/poner ordenado: es el origen del estudio.
-            raise DomainError("El estado 'ordenado' no se modifica manualmente.")
+        # if state == "ordenado":
+        #     # No permitimos quitar/poner ordenado: es el origen del estudio.
+        #     raise DomainError("El estado 'ordenado' no se modifica manualmente.")
 
         def has_ts(st: str) -> bool:
             return bool(row[STATE_TO_COL[st]])
@@ -225,21 +225,21 @@ class StudyRepo:
         # Debe estar marcado el estado previo
 
         # (A) Detectar inconsistencia: hay un estado posterior marcado pero este no
-        for later in STATES_ORDER[idx + 1 :]:
-            if row[STATE_TO_COL[later]]:
-                raise DomainError(
-                    f"Datos inconsistentes: '{later}' está marcado pero '{state}' no. "
-                    "Corrige desde el último estado válido."
-                )
+        # for later in STATES_ORDER[idx + 1 :]:
+        #     if row[STATE_TO_COL[later]]:
+        #         raise DomainError(
+        #             f"Datos inconsistentes: '{later}' está marcado pero '{state}' no. "
+        #             "Corrige desde el último estado válido."
+        #         )
 
-        # (B) Verificar que el estado previo esté marcado
-        if not has_ts(prev_state):
-            raise DomainError(f"Primero debes marcar '{prev_state}' antes de '{state}'.")
+        # # (B) Verificar que el estado previo esté marcado
+        # if not has_ts(prev_state):
+        #     raise DomainError(f"Primero debes marcar '{prev_state}' antes de '{state}'.")
 
-        # Centro requerido desde enviado en adelante
-        if state in ("enviado", "pagado", "recibido", "entregado"):
-            if row["centro_id"] is None:
-                raise DomainError(f"Asigna el centro histológico antes de marcar '{state}'.")
+        # # Centro requerido desde enviado en adelante
+        # if state in ("enviado", "pagado", "recibido", "entregado"):
+        #     if row["centro_id"] is None:
+        #         raise DomainError(f"Asigna el centro histológico antes de marcar '{state}'.")
 
         col = STATE_TO_COL[state]
         self.conn.execute(
@@ -262,6 +262,7 @@ class StudyRepo:
         q: str = "",
         estado: str = "Todos",
         tipo: str = "Todos",
+        recibido_no_pagado: bool = False,
         centro_id: int | None = None,
         cita_from: str | None = None,  # "YYYY-MM-DD"
         cita_to: str | None = None,  # "YYYY-MM-DD"
@@ -282,9 +283,7 @@ class StudyRepo:
         if estado and estado != "Todos":
             st = (estado or "").strip().lower()
 
-            if st == "ordenado":
-                where.append("e.ordenado_en IS NOT NULL AND e.enviado_en IS NULL")
-            elif st == "enviado":
+            if st == "enviado":
                 where.append("e.enviado_en IS NOT NULL AND e.pagado_en IS NULL")
             elif st == "pagado":
                 where.append("e.pagado_en IS NOT NULL AND e.recibido_en IS NULL")
@@ -300,6 +299,9 @@ class StudyRepo:
         if centro_id is not None:
             where.append("e.centro_id = ?")
             params.append(int(centro_id))
+
+        if recibido_no_pagado:
+            where.append("e.recibido_en IS NOT NULL AND e.pagado_en IS NULL")
 
         q = (q or "").strip()
         if q:
@@ -340,3 +342,26 @@ class StudyRepo:
         params.append(int(limit))
 
         return self.conn.execute(sql, tuple(params)).fetchall()
+
+    def set_state_many(self, ids: list[int], estado: str) -> None:
+        for estudio_id in ids:
+            self.set_state_one(estudio_id, estado)
+
+    def set_state_one(self, estudio_id: int, estado: str) -> None:
+        if estado not in ("enviado", "pagado", "recibido", "entregado"):
+            raise DomainError("Estado inválido.")
+
+        # timestamp del estado elegido
+        col = f"{estado}_en"
+
+        self.conn.execute(
+            f"""
+            UPDATE estudios
+            SET {col}=COALESCE({col}, datetime('now')),
+                estado_actual=?,
+                actualizado_en=datetime('now')
+            WHERE estudio_id=?
+            """,
+            (estado, estudio_id),
+        )
+        self.conn.commit()

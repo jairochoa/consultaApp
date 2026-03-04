@@ -53,16 +53,19 @@ class StudiesAdminView(ttk.Frame):
         self.cfg = load_config()
         self.repo = StudyRepo(conn)
 
-        self.center_var = tk.StringVar(value="")
+        # self.center_var = tk.StringVar(value="")
         self._anchor_iid: str | None = None
 
         self.filter_q = tk.StringVar(value="")
         self.filter_estado = tk.StringVar(value="Todos")
         self.filter_tipo = tk.StringVar(value="Todos")
-        self.filter_centro = tk.StringVar(value="Todos")
+        # self.filter_centro = tk.StringVar(value="Todos")
 
-        self.filter_centro = tk.StringVar(value="Todos")  # filtro
-        self.assign_centro = tk.StringVar(value="")  # asignación
+        # self.filter_centro = tk.StringVar(value="Todos")  # filtro
+        # self.assign_centro = tk.StringVar(value="")  # asignación
+        self.filter_recibido_no_pagado = tk.BooleanVar(
+            value=False
+        )  # filtro especial para recibidos no pagados
 
         self._build()
         self.refresh()
@@ -221,6 +224,8 @@ class StudiesAdminView(ttk.Frame):
         # Frame para organizar los filtros en filas
         filters_row1 = ttk.Frame(filter_frame, style="Modern.TFrame")
         filters_row1.pack(fill=tk.X, pady=(0, 10))
+        filters_row2 = ttk.Frame(filter_frame, style="Modern.TFrame")
+        filters_row2.pack(fill=tk.X, pady=(0, 10))
 
         # Búsqueda por paciente
         ttk.Label(filters_row1, text="Paciente:", style="Modern.TLabel").pack(
@@ -254,19 +259,27 @@ class StudiesAdminView(ttk.Frame):
             style="Modern.TCombobox",
         ).pack(side=tk.LEFT, padx=(0, 16))
 
+        self.filter_recibido_no_pagado = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            filters_row2,
+            text="Recibidos NO pagados",
+            variable=self.filter_recibido_no_pagado,
+            style="Modern.TCheckbutton",
+        ).pack(side=tk.LEFT, padx=(0, 16))
+
         # Centro histológico
-        ttk.Label(filters_row1, text="Centro:", style="Modern.TLabel").pack(
-            side=tk.LEFT, padx=(0, 6)
-        )
-        self.cbo_center_filter = ttk.Combobox(
-            filters_row1,
-            textvariable=self.filter_centro,
-            values=["Todos", *self._load_center_names()],
-            width=28,
-            state="readonly",
-            style="Modern.TCombobox",
-        )
-        self.cbo_center_filter.pack(side=tk.LEFT, padx=(0, 0), fill=tk.X, expand=True)
+        # ttk.Label(filters_row1, text="Centro:", style="Modern.TLabel").pack(
+        #     side=tk.LEFT, padx=(0, 6)
+        # )
+        # self.cbo_center_filter = ttk.Combobox(
+        #     filters_row1,
+        #     textvariable=self.filter_centro,
+        #     values=["Todos", *self._load_center_names()],
+        #     width=28,
+        #     state="readonly",
+        #     style="Modern.TCombobox",
+        # )
+        # self.cbo_center_filter.pack(side=tk.LEFT, padx=(0, 0), fill=tk.X, expand=True)
 
         # Segunda fila de filtros (fechas)
         filters_row2 = ttk.Frame(filter_frame, style="Modern.TFrame")
@@ -310,26 +323,58 @@ class StudiesAdminView(ttk.Frame):
         bulk_controls = ttk.Frame(bulk_frame, style="Modern.TFrame")
         bulk_controls.pack(fill=tk.X, pady=(0, 12))
 
-        ttk.Label(bulk_controls, text="Centro a asignar:", style="Modern.TLabel").pack(
+        # ---- ACCIONES MASIVAS ----
+        bulk_controls = ttk.Frame(bulk_frame, style="Modern.TFrame")
+        bulk_controls.pack(fill=tk.X, pady=(0, 12))
+
+        ttk.Label(bulk_controls, text="Estado a asignar:", style="Modern.TLabel").pack(
             side=tk.LEFT, padx=(0, 6)
         )
 
-        self.cbo_center_assign = ttk.Combobox(
+        self.bulk_estado = tk.StringVar(value="enviado")
+        ttk.Combobox(
             bulk_controls,
-            textvariable=self.assign_centro,
-            values=self._load_center_names(),
-            width=32,
+            textvariable=self.bulk_estado,
+            values=["enviado", "pagado", "recibido", "entregado"],
+            width=16,
             state="readonly",
             style="Modern.TCombobox",
-        )
-        self.cbo_center_assign.pack(side=tk.LEFT, padx=(0, 12), fill=tk.X, expand=True)
+        ).pack(side=tk.LEFT, padx=(0, 12))
 
         ttk.Button(
             bulk_controls,
-            text="📌 Asignar a seleccionados",
-            command=self.assign_center_bulk,
+            text="✅ Aplicar a seleccionados",
+            command=self.set_state_bulk,
             style="Modern.TButton",
         ).pack(side=tk.LEFT, padx=(0, 8))
+
+        ttk.Button(
+            bulk_controls,
+            text="✕ Limpiar selección",
+            command=self._clear_selection,
+            style="ModernSecondary.TButton",
+        ).pack(side=tk.LEFT)
+
+        # ttk.Label(bulk_controls, text="Centro a asignar:", style="Modern.TLabel").pack(
+        #    side=tk.LEFT, padx=(0, 6)
+        # )
+
+        # self.cbo_center_assign = ttk.Combobox(
+        #    bulk_controls,
+        #    textvariable=self.assign_centro,
+        #    values=self._load_center_names(),
+        #    width=32,
+        #    state="readonly",
+        #    style="Modern.TCombobox",
+        # )
+        # self.cbo_center_assign.pack(side=tk.LEFT, padx=(0, 12), fill=tk.X, expand=True)
+
+        # ttk.Button(
+        #     bulk_controls,
+        #     text="📌 Asignar a seleccionados",
+        #     command=self.assign_center_bulk,
+        #     style="Modern.TButton",
+        # ).pack(side=tk.LEFT, padx=(0, 8))
 
         ttk.Button(
             bulk_controls,
@@ -370,7 +415,7 @@ class StudiesAdminView(ttk.Frame):
             "paciente",
             "tipo",
             "subtipo",
-            "centro",
+            # "centro",
             "enviado",
             "pagado",
             "recibido",
@@ -398,7 +443,7 @@ class StudiesAdminView(ttk.Frame):
             ("paciente", "Nombre-Apellido", 140),
             ("tipo", "Estudio", 50),
             ("subtipo", "Subtipo", 80),
-            ("centro", "Centro", 160),
+            # ("centro", "Centro", 160),
             ("enviado", "Enviado", 50),
             ("pagado", "Pagado", 50),
             ("recibido", "Recibido", 50),
@@ -441,7 +486,7 @@ class StudiesAdminView(ttk.Frame):
         self.tree.bind("<Button-1>", self._on_click, add=False)
         self.tree.bind("<Double-1>", self._on_double_click, add=True)
 
-        self._refresh_center_values()
+        # self._refresh_center_values()
 
     # ---------------- Data ----------------
 
@@ -450,7 +495,7 @@ class StudiesAdminView(ttk.Frame):
         for i in self.tree.get_children():
             self.tree.delete(i)
 
-        centro_id = self._resolve_center_id_by_name(self.filter_centro.get())
+        # centro_id = self._resolve_center_id_by_name(self.filter_centro.get())
 
         cita_from = self.de_from.get().strip() if hasattr(self, "de_from") else ""
         cita_to = self.de_to.get().strip() if hasattr(self, "de_to") else ""
@@ -465,7 +510,8 @@ class StudiesAdminView(ttk.Frame):
             q=self.filter_q.get(),
             estado=self.filter_estado.get(),
             tipo=self.filter_tipo.get(),
-            centro_id=centro_id,
+            # centro_id=centro_id,
+            recibido_no_pagado=bool(self.filter_recibido_no_pagado.get()),
             cita_from=cita_from,
             cita_to=cita_to,
             limit=1500,
@@ -485,7 +531,7 @@ class StudiesAdminView(ttk.Frame):
                     r["paciente"],
                     r["tipo"],
                     r["subtipo"],
-                    r["centro_nombre"] or "",
+                    # r["centro_nombre"] or "",
                     self._mark(r["enviado_en"]),
                     self._mark(r["pagado_en"]),
                     self._mark(r["recibido_en"]),
@@ -494,8 +540,8 @@ class StudiesAdminView(ttk.Frame):
             )
 
         # refrescar lista de centros (por si se agregaron en DB)
-        if hasattr(self, "cbo_center"):
-            self.cbo_center["values"] = ["Todos", *self._load_center_names()]
+        # if hasattr(self, "cbo_center"):
+        #     self.cbo_center["values"] = ["Todos", *self._load_center_names()]
 
     def _mark(self, ts: object) -> str:
         return "✔" if ts else "✘"
@@ -505,132 +551,132 @@ class StudiesAdminView(ttk.Frame):
 
     # ---------------- Centers ----------------
 
-    def _refresh_center_values(self) -> None:
-        # centros desde YAML + DB
-        cfg_centers = list(getattr(self.cfg.clinic, "histology_centers", []) or [])
-        db_centers = [
-            r["nombre"]
-            for r in self.conn.execute(
-                "SELECT nombre FROM centros_histologicos ORDER BY nombre"
-            ).fetchall()
-        ]
+    # def _refresh_center_values(self) -> None:
+    #     # centros desde YAML + DB
+    #     cfg_centers = list(getattr(self.cfg.clinic, "histology_centers", []) or [])
+    #     db_centers = [
+    #         r["nombre"]
+    #         for r in self.conn.execute(
+    #             "SELECT nombre FROM centros_histologicos ORDER BY nombre"
+    #         ).fetchall()
+    #     ]
 
-        seen: set[str] = set()
-        centers: list[str] = []
-        for x in cfg_centers + db_centers:
-            x = (x or "").strip()
-            if x and x not in seen:
-                seen.add(x)
-                centers.append(x)
+    #     seen: set[str] = set()
+    #     centers: list[str] = []
+    #     for x in cfg_centers + db_centers:
+    #         x = (x or "").strip()
+    #         if x and x not in seen:
+    #             seen.add(x)
+    #             centers.append(x)
 
-        # ---- 1) Combo de filtros (incluye 'Todos') ----
-        if hasattr(self, "cbo_center_filter"):
-            current = (
-                (self.filter_centro.get() or "").strip() if hasattr(self, "filter_centro") else ""
-            )
-            self.cbo_center_filter["values"] = ["Todos", *centers]
-            # mantener valor si aún existe; si no, "Todos"
-            if current and current in ["Todos", *centers]:
-                self.filter_centro.set(current)
-            else:
-                self.filter_centro.set("Todos")
+    #     # ---- 1) Combo de filtros (incluye 'Todos') ----
+    #     if hasattr(self, "cbo_center_filter"):
+    #         current = (
+    #             (self.filter_centro.get() or "").strip() if hasattr(self, "filter_centro") else ""
+    #         )
+    #         self.cbo_center_filter["values"] = ["Todos", *centers]
+    #         # mantener valor si aún existe; si no, "Todos"
+    #         if current and current in ["Todos", *centers]:
+    #             self.filter_centro.set(current)
+    #         else:
+    #             self.filter_centro.set("Todos")
 
-        # ---- 2) Combo de asignación masiva (solo existentes) ----
-        if hasattr(self, "cbo_center_assign"):
-            current = (
-                (self.assign_centro.get() or "").strip() if hasattr(self, "assign_centro") else ""
-            )
-            self.cbo_center_assign["values"] = centers
-            # mantener valor si existe; si no, vacío
-            if current and current in centers:
-                self.assign_centro.set(current)
-            else:
-                self.assign_centro.set("")
+    #     # ---- 2) Combo de asignación masiva (solo existentes) ----
+    #     # if hasattr(self, "cbo_center_assign"):
+    #     #     current = (
+    #     #         (self.assign_centro.get() or "").strip() if hasattr(self, "assign_centro") else ""
+    #     #     )
+    #     #     self.cbo_center_assign["values"] = centers
+    #     #     # mantener valor si existe; si no, vacío
+    #     #     if current and current in centers:
+    #     #         self.assign_centro.set(current)
+    #     #     else:
+    #     #         self.assign_centro.set("")
 
-    def _get_or_create_center_id(self, name: str) -> int:
-        row = self.conn.execute(
-            "SELECT centro_id FROM centros_histologicos WHERE nombre=?",
-            (name,),
-        ).fetchone()
-        if row:
-            return int(row["centro_id"])
+    # def _get_or_create_center_id(self, name: str) -> int:
+    #     row = self.conn.execute(
+    #         "SELECT centro_id FROM centros_histologicos WHERE nombre=?",
+    #         (name,),
+    #     ).fetchone()
+    #     if row:
+    #         return int(row["centro_id"])
 
-        cur = self.conn.execute(
-            "INSERT INTO centros_histologicos (nombre) VALUES (?)",
-            (name,),
-        )
-        self.conn.commit()
-        last = cur.lastrowid
-        if last is None:
-            raise RuntimeError("No se pudo crear el centro histológico.")
-        return int(last)
+    #     cur = self.conn.execute(
+    #         "INSERT INTO centros_histologicos (nombre) VALUES (?)",
+    #         (name,),
+    #     )
+    #     self.conn.commit()
+    #     last = cur.lastrowid
+    #     if last is None:
+    #         raise RuntimeError("No se pudo crear el centro histológico.")
+    #     return int(last)
 
-    def assign_center_bulk(self) -> None:
-        sel = self.tree.selection()
-        if not sel:
-            warn("Selecciona uno o más estudios.")
-            return
+    # def assign_center_bulk(self) -> None:
+    #     sel = self.tree.selection()
+    #     if not sel:
+    #         warn("Selecciona uno o más estudios.")
+    #         return
 
-        # 👇 OJO: ahora el centro para asignar viene del combo de ACCIONES MASIVAS
-        name = (self.assign_centro.get() or "").strip()
-        if not name:
-            warn("Selecciona un centro histológico para asignar.")
-            return
+    #     # 👇 OJO: ahora el centro para asignar viene del combo de ACCIONES MASIVAS
+    #     name = (self.assign_centro.get() or "").strip()
+    #     if not name:
+    #         warn("Selecciona un centro histológico para asignar.")
+    #         return
 
-        ids: list[int] = []
-        for x in sel:
-            try:
-                ids.append(int(x))
-            except ValueError:
-                continue
+    #     ids: list[int] = []
+    #     for x in sel:
+    #         try:
+    #             ids.append(int(x))
+    #         except ValueError:
+    #             continue
 
-        if not ids:
-            warn("Selección inválida.")
-            return
+    #     if not ids:
+    #         warn("Selección inválida.")
+    #         return
 
-        try:
-            centro_id = self._get_or_create_center_id(name)
+    #     try:
+    #         centro_id = self._get_or_create_center_id(name)
 
-            # Confirmar si se va a sobreescribir centro (si alguno ya tiene otro)
-            rows = [self.repo.get_admin(i) for i in ids]
-            diff = any(
-                (r is not None)
-                and (r["centro_id"] is not None)
-                and int(r["centro_id"]) != centro_id
-                for r in rows
-            )
-            if diff:
-                ok = messagebox.askyesno(
-                    "Confirmar",
-                    "Algunos estudios ya tienen centro asignado.\n"
-                    "¿Deseas sobreescribir el centro para los seleccionados?",
-                    parent=self,
-                )
-                if not ok:
-                    return
+    #         # Confirmar si se va a sobreescribir centro (si alguno ya tiene otro)
+    #         rows = [self.repo.get_admin(i) for i in ids]
+    #         diff = any(
+    #             (r is not None)
+    #             and (r["centro_id"] is not None)
+    #             and int(r["centro_id"]) != centro_id
+    #             for r in rows
+    #         )
+    #         if diff:
+    #             ok = messagebox.askyesno(
+    #                 "Confirmar",
+    #                 "Algunos estudios ya tienen centro asignado.\n"
+    #                 "¿Deseas sobreescribir el centro para los seleccionados?",
+    #                 parent=self,
+    #             )
+    #             if not ok:
+    #                 return
 
-            self.repo.set_center_many(ids, centro_id)
+    #         self.repo.set_center_many(ids, centro_id)
 
-            # refresca combos (por si agregaste centros nuevos)
-            self._refresh_center_values()
+    #         # refresca combos (por si agregaste centros nuevos)
+    #         self._refresh_center_values()
 
-            info("Centro asignado a los seleccionados.")
-            self.bus.publish("studies")
+    #         info("Centro asignado a los seleccionados.")
+    #         self.bus.publish("studies")
 
-            # Mantener selección (cuando refresque por el bus)
-            # Nota: si tu refresh borra y recrea filas, esto ayuda.
-            self.after(
-                50,
-                lambda: [
-                    self.tree.selection_set([str(i) for i in ids if self.tree.exists(str(i))]),
-                    self.tree.see(str(ids[0])) if ids and self.tree.exists(str(ids[0])) else None,
-                ],
-            )
+    #         # Mantener selección (cuando refresque por el bus)
+    #         # Nota: si tu refresh borra y recrea filas, esto ayuda.
+    #         self.after(
+    #             50,
+    #             lambda: [
+    #                 self.tree.selection_set([str(i) for i in ids if self.tree.exists(str(i))]),
+    #                 self.tree.see(str(ids[0])) if ids and self.tree.exists(str(ids[0])) else None,
+    #             ],
+    #         )
 
-        except DomainError as e:
-            warn(str(e))
-        except Exception as e:
-            error(str(e))
+    #     except DomainError as e:
+    #         warn(str(e))
+    #     except Exception as e:
+    #         error(str(e))
 
     # ---------------- Cell clicks (status) ----------------
 
@@ -698,18 +744,18 @@ class StudiesAdminView(ttk.Frame):
                 will_unmark_any = True
                 break
 
-        if will_unmark_any:
-            idx = STATES_ORDER.index(col_name)
-            will_clear = ", ".join(STATES_ORDER[idx:])
-            ok = messagebox.askyesno(
-                "Confirmar corrección",
-                f"Vas a desmarcar '{col_name}' en uno o más estudios.\n"
-                f"Esto también desmarcará: {will_clear}.\n\n"
-                "¿Deseas continuar?",
-                parent=self,
-            )
-            if not ok:
-                return "break"
+            # if will_unmark_any:
+            #     idx = STATES_ORDER.index(col_name)
+            #     will_clear = ", ".join(STATES_ORDER[idx:])
+            #     ok = messagebox.askyesno(
+            #         "Confirmar corrección",
+            #         f"Vas a desmarcar '{col_name}' en uno o más estudios.\n"
+            #         f"Esto también desmarcará: {will_clear}.\n\n"
+            #         "¿Deseas continuar?",
+            #         parent=self,
+            #     )
+            # if not ok:
+            #    return "break"
 
         # Aplicar toggle a todos los seleccionados
         delivered_to_prompt: list[int] = []
@@ -809,27 +855,27 @@ class StudiesAdminView(ttk.Frame):
                 "Puedes cargarlo luego con doble click sobre el estudio."
             )
 
-    def _load_center_names(self) -> list[str]:
-        rows = self.conn.execute(
-            "SELECT nombre FROM centros_histologicos ORDER BY nombre"
-        ).fetchall()
-        return [str(r["nombre"]) for r in rows]
+    # def _load_center_names(self) -> list[str]:
+    #     rows = self.conn.execute(
+    #         "SELECT nombre FROM centros_histologicos ORDER BY nombre"
+    #     ).fetchall()
+    #     return [str(r["nombre"]) for r in rows]
 
-    def _resolve_center_id_by_name(self, name: str) -> int | None:
-        name = (name or "").strip()
-        if not name or name == "Todos":
-            return None
-        row = self.conn.execute(
-            "SELECT centro_id FROM centros_histologicos WHERE nombre=?",
-            (name,),
-        ).fetchone()
-        return int(row["centro_id"]) if row else None
+    # def _resolve_center_id_by_name(self, name: str) -> int | None:
+    #     name = (name or "").strip()
+    #     if not name or name == "Todos":
+    #         return None
+    #     row = self.conn.execute(
+    #         "SELECT centro_id FROM centros_histologicos WHERE nombre=?",
+    #         (name,),
+    #     ).fetchone()
+    #     return int(row["centro_id"]) if row else None
 
     def _reset_filters(self) -> None:
         self.filter_q.set("")
         self.filter_estado.set("Todos")
         self.filter_tipo.set("Todos")
-        self.filter_centro.set("Todos")
+        # self.filter_centro.set("Todos")
         if hasattr(self, "de_from"):
             self.de_from.delete(0, tk.END)
         if hasattr(self, "de_to"):
@@ -880,3 +926,34 @@ class StudiesAdminView(ttk.Frame):
         self.tree.selection_set(row_id)
         self.tree.focus(row_id)
         self._anchor_iid = row_id
+
+    def set_state_bulk(self) -> None:
+        sel = self.tree.selection()
+        if not sel:
+            warn("Selecciona uno o más estudios.")
+            return
+
+        estado = (self.bulk_estado.get() or "").strip()
+        if estado not in ("enviado", "pagado", "recibido", "entregado"):
+            warn("Estado inválido.")
+            return
+
+        ids: list[int] = []
+        for x in sel:
+            try:
+                ids.append(int(x))
+            except ValueError:
+                pass
+
+        if not ids:
+            warn("Selección inválida.")
+            return
+
+        try:
+            self.repo.set_state_many(ids, estado)  # <- lo creas en StudyRepo
+            info(f"Estado '{estado}' aplicado a {len(ids)} estudios.")
+            self.bus.publish("studies")
+        except DomainError as e:
+            warn(str(e))
+        except Exception as e:
+            error(str(e))
