@@ -231,8 +231,9 @@ class StudiesAdminView(ttk.Frame):
         ttk.Label(filters_row1, text="Paciente:", style="Modern.TLabel").pack(
             side=tk.LEFT, padx=(0, 6)
         )
-        ttk.Entry(filters_row1, textvariable=self.filter_q, width=24, style="Modern.TEntry").pack(
-            side=tk.LEFT, padx=(0, 16), fill=tk.X, expand=True
+        ttk.Entry(filters_row1, textvariable=self.filter_q, width=28, style="Modern.TEntry").pack(
+            side=tk.LEFT,
+            padx=(0, 16),  # , fill=tk.X, expand=True
         )
 
         # Estado
@@ -378,10 +379,10 @@ class StudiesAdminView(ttk.Frame):
 
         ttk.Button(
             bulk_controls,
-            text="✕ Limpiar selección",
-            command=self._clear_selection,
+            text="Seleccionar todo",
+            command=self._select_all_visible,
             style="ModernSecondary.TButton",
-        ).pack(side=tk.LEFT)
+        ).pack(side=tk.LEFT, padx=(8, 0))
 
         # ---- TABLE FRAME ----
         table_frame = ttk.Frame(container, style="Modern.TFrame")
@@ -432,6 +433,9 @@ class StudiesAdminView(ttk.Frame):
             yscrollcommand=vsb.set,
             xscrollcommand=hsb.set,
         )
+
+        self.tree.bind("<Control-a>", lambda e: (self._select_all_visible(), "break"))
+        self.tree.bind("<Control-A>", lambda e: (self._select_all_visible(), "break"))
 
         vsb.config(command=self.tree.yview)
         hsb.config(command=self.tree.xview)
@@ -487,6 +491,25 @@ class StudiesAdminView(ttk.Frame):
         self.tree.bind("<Double-1>", self._on_double_click, add=True)
 
         # self._refresh_center_values()
+
+        self._refresh_job: str | None = None
+
+        def _schedule_refresh(*_a: object) -> None:
+            # debounce: evita refrescar en cada tecla inmediata
+            if self._refresh_job:
+                try:
+                    self.after_cancel(self._refresh_job)
+                except Exception:
+                    pass
+            self._refresh_job = self.after(250, self.refresh)  # 250ms
+
+        # Auto-refresh al escribir
+        self.filter_q.trace_add("write", _schedule_refresh)
+        self.filter_estado.trace_add("write", _schedule_refresh)
+        self.filter_tipo.trace_add("write", _schedule_refresh)
+
+        self.de_from.bind("<<DateEntrySelected>>", lambda _e: _schedule_refresh())
+        self.de_to.bind("<<DateEntrySelected>>", lambda _e: _schedule_refresh())
 
     # ---------------- Data ----------------
 
@@ -957,3 +980,7 @@ class StudiesAdminView(ttk.Frame):
             warn(str(e))
         except Exception as e:
             error(str(e))
+
+    def _select_all_visible(self) -> None:
+        # selecciona TODO lo que esté actualmente en la tabla (lo que arrojó el filtro)
+        self.tree.selection_set(self.tree.get_children())
