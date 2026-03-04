@@ -152,10 +152,11 @@ class StudyRepo:
 
     def toggle_state(self, estudio_id: int, state: str) -> tuple[str, list[str]]:
         """
-        Alterna el estado (✅/❌) respetando:
-        - Secuencial estricto al marcar hacia adelante
-        - Corrección hacia atrás permitida con cascada (limpia posteriores)
-        - Centro requerido desde 'enviado' en adelante
+        Toggle INDEPENDIENTE:
+        - Marca / desmarca SOLO el estado seleccionado.
+        - NO requiere estados previos.
+        - NO limpia estados posteriores.
+        - NO requiere centro.
         Retorna: (estado_actual_final, estados_afectados_lista)
         """
         if state not in STATES_ORDER:
@@ -165,96 +166,66 @@ class StudyRepo:
         if not row:
             raise DomainError("Estudio no encontrado.")
 
-        # if state == "ordenado":
-        #     # No permitimos quitar/poner ordenado: es el origen del estudio.
-        #     raise DomainError("El estado 'ordenado' no se modifica manualmente.")
+        # Mantén 'ordenado' como origen (no editable manualmente)
+        if state == "ordenado":
+            raise DomainError("El estado 'ordenado' no se modifica manualmente.")
 
         def has_ts(st: str) -> bool:
             return bool(row[STATE_TO_COL[st]])
 
-        idx = STATES_ORDER.index(state)
-        prev_state = STATES_ORDER[idx - 1]
-
         now = _now_iso()
-        affected: list[str] = []
+        affected: list[str] = [state]
+        col = STATE_TO_COL[state]
 
-        # Si está marcado ✅ -> desmarcar con cascada
-        if has_ts(state):
-            # limpiar este y posteriores
-            cols_to_clear: list[str] = []
-            for st in STATES_ORDER[idx:]:
-                cols_to_clear.append(STATE_TO_COL[st])
-                affected.append(st)
+        # ---- calcular nuevo estado_actual (sin cascada) ----
+        # flags actuales por estado
+        flags: dict[str, bool] = {}
+        for st in STATES_ORDER:
+            if st == "ordenado":
+                # 'ordenado' lo tratamos como siempre presente
+                flags[st] = True
+            else:
+                flags[st] = bool(row[STATE_TO_COL[st]])
 
-            # si quitas recibido o antes, también limpiamos resultado
-            clear_result = idx <= STATES_ORDER.index("recibido")
+        # aplicar toggle simulado SOLO sobre el estado clickeado
+        turning_on = not has_ts(state)
+        flags[state] = turning_on
 
-            set_clause = ", ".join([f"{c}=NULL" for c in cols_to_clear])
-            if clear_result:
-                set_clause += ", resultado=NULL, resultado_editado_en=NULL"
+        def compute_estado_actual() -> str:
+            # más avanzado marcado (entregado > recibido > pagado > enviado > ordenado)
+            for st in reversed(STATES_ORDER):
+                if flags.get(st):
+                    return st
+            return "ordenado"
 
-            # nuevo estado_actual = último estado que quede con timestamp
-            # (como vamos a limpiar desde idx, el nuevo será el anterior que esté marcado)
-            # ordenado siempre está marcado por diseño.
-            new_estado = prev_state
-            # Pero si prev_state también era NULL por algún error de datos, caeremos a 'ordenado'
+        new_estado = compute_estado_actual()
 
-            new_estado = "ordenado"
-            for st in reversed(STATES_ORDER[:idx]):  # estados anteriores al que estás limpiando
-                if st == "ordenado":
-                    new_estado = "ordenado"
-                    break
-                if row[STATE_TO_COL[st]]:
-                    new_estado = st
-                    break
-
+        # ---- aplicar en BD SOLO este campo ----
+        if turning_on:
             self.conn.execute(
                 f"""
                 UPDATE estudios
-                SET {set_clause},
+                SET {col}=?,
+                    estado_actual=?,
+                    actualizado_en=?
+                WHERE estudio_id=?
+                """,
+                (now, new_estado, now, estudio_id),
+            )
+        else:
+            self.conn.execute(
+                f"""
+                UPDATE estudios
+                SET {col}=NULL,
                     estado_actual=?,
                     actualizado_en=?
                 WHERE estudio_id=?
                 """,
                 (new_estado, now, estudio_id),
             )
-            self.conn.commit()
-            return new_estado, affected
 
-        # Si está desmarcado ❌ -> marcar hacia adelante (secuencial estricto)
-        # Debe estar marcado el estado previo
-
-        # (A) Detectar inconsistencia: hay un estado posterior marcado pero este no
-        # for later in STATES_ORDER[idx + 1 :]:
-        #     if row[STATE_TO_COL[later]]:
-        #         raise DomainError(
-        #             f"Datos inconsistentes: '{later}' está marcado pero '{state}' no. "
-        #             "Corrige desde el último estado válido."
-        #         )
-
-        # # (B) Verificar que el estado previo esté marcado
-        # if not has_ts(prev_state):
-        #     raise DomainError(f"Primero debes marcar '{prev_state}' antes de '{state}'.")
-
-        # # Centro requerido desde enviado en adelante
-        # if state in ("enviado", "pagado", "recibido", "entregado"):
-        #     if row["centro_id"] is None:
-        #         raise DomainError(f"Asigna el centro histológico antes de marcar '{state}'.")
-
-        col = STATE_TO_COL[state]
-        self.conn.execute(
-            f"""
-            UPDATE estudios
-            SET {col}=?,
-                estado_actual=?,
-                actualizado_en=?
-            WHERE estudio_id=?
-            """,
-            (now, state, now, estudio_id),
-        )
         self.conn.commit()
-        affected.append(state)
-        return state, affected
+        return new_estado, affected
 
     def list_admin_filtered(
         self,
@@ -262,7 +233,7 @@ class StudyRepo:
         q: str = "",
         estado: str = "Todos",
         tipo: str = "Todos",
-        recibido_no_pagado: bool = False,
+        no_pagado: bool = False,
         centro_id: int | None = None,
         cita_from: str | None = None,  # "YYYY-MM-DD"
         cita_to: str | None = None,  # "YYYY-MM-DD"
@@ -284,11 +255,11 @@ class StudyRepo:
             st = (estado or "").strip().lower()
 
             if st == "enviado":
-                where.append("e.enviado_en IS NOT NULL AND e.pagado_en IS NULL")
+                where.append("e.enviado_en IS NOT NULL")
             elif st == "pagado":
-                where.append("e.pagado_en IS NOT NULL AND e.recibido_en IS NULL")
+                where.append("e.pagado_en IS NOT NULL")
             elif st == "recibido":
-                where.append("e.recibido_en IS NOT NULL AND e.entregado_en IS NULL")
+                where.append("e.recibido_en IS NOT NULL")
             elif st == "entregado":
                 where.append("e.entregado_en IS NOT NULL")
 
@@ -300,8 +271,8 @@ class StudyRepo:
             where.append("e.centro_id = ?")
             params.append(int(centro_id))
 
-        if recibido_no_pagado:
-            where.append("e.recibido_en IS NOT NULL AND e.pagado_en IS NULL")
+        if no_pagado:
+            where.append("e.pagado_en IS NULL")
 
         q = (q or "").strip()
         if q:

@@ -63,7 +63,7 @@ class StudiesAdminView(ttk.Frame):
 
         # self.filter_centro = tk.StringVar(value="Todos")  # filtro
         # self.assign_centro = tk.StringVar(value="")  # asignación
-        self.filter_recibido_no_pagado = tk.BooleanVar(
+        self.filter_no_pagado = tk.BooleanVar(
             value=False
         )  # filtro especial para recibidos no pagados
 
@@ -242,7 +242,7 @@ class StudiesAdminView(ttk.Frame):
         ttk.Combobox(
             filters_row1,
             textvariable=self.filter_estado,
-            values=["Todos", "ordenado", "enviado", "pagado", "recibido", "entregado"],
+            values=["Todos", "enviado", "pagado", "recibido", "entregado"],
             width=14,
             state="readonly",
             style="Modern.TCombobox",
@@ -259,11 +259,11 @@ class StudiesAdminView(ttk.Frame):
             style="Modern.TCombobox",
         ).pack(side=tk.LEFT, padx=(0, 16))
 
-        self.filter_recibido_no_pagado = tk.BooleanVar(value=False)
+        self.filter_no_pagado = tk.BooleanVar(value=False)
         ttk.Checkbutton(
             filters_row2,
-            text="Recibidos NO pagados",
-            variable=self.filter_recibido_no_pagado,
+            text="No pagados",
+            variable=self.filter_no_pagado,
             style="Modern.TCheckbutton",
         ).pack(side=tk.LEFT, padx=(0, 16))
 
@@ -511,7 +511,7 @@ class StudiesAdminView(ttk.Frame):
             estado=self.filter_estado.get(),
             tipo=self.filter_tipo.get(),
             # centro_id=centro_id,
-            recibido_no_pagado=bool(self.filter_recibido_no_pagado.get()),
+            no_pagado=bool(self.filter_no_pagado.get()),
             cita_from=cita_from,
             cita_to=cita_to,
             limit=1500,
