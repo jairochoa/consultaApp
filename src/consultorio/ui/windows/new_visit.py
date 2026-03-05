@@ -40,21 +40,69 @@ class NewVisitWindow(tk.Toplevel):
 
     def _build(self) -> None:
         style = ttk.Style()
-        style.configure("Field.TLabel", font=("Segoe UI", 12, "bold"), foreground="#0b2d5c")
+        style.theme_use("clam")
+
+        BG = "#f5f7fb"
+        CARD = "#ffffff"
+        PRIMARY = "#0d47a1"
+        TEXT = "#111827"
+        MUTED = "#6b7280"
+
+        style.configure("Bg.TFrame", background=BG)
+        style.configure("Card.TFrame", background=CARD)
+        style.configure("Header.TFrame", background=CARD)
+
+        style.configure(
+            "H1.TLabel", background=CARD, foreground=PRIMARY, font=("Segoe UI", 18, "bold")
+        )
+        style.configure(
+            "H2.TLabel", background=CARD, foreground=TEXT, font=("Segoe UI", 12, "bold")
+        )
+        style.configure("Muted.TLabel", background=CARD, foreground=MUTED, font=("Segoe UI", 12))
+
+        style.configure(
+            "Field.TLabel", background=CARD, foreground=TEXT, font=("Segoe UI", 12, "bold")
+        )
+
+        style.configure("Section.TLabelframe", background=CARD)
+        style.configure(
+            "Section.TLabelframe.Label",
+            background=CARD,
+            foreground=PRIMARY,
+            font=("Segoe UI", 12, "bold"),
+        )
+
+        style.configure(
+            "Primary.TButton",
+            font=("Segoe UI", 12, "bold"),
+            padding=(14, 8),
+            background=PRIMARY,
+            foreground="#ffffff",
+        )
+        style.map("Primary.TButton", background=[("active", "#1565c0"), ("pressed", "#0b3d91")])
+
+        style.configure(
+            "Secondary.TButton",
+            font=("Segoe UI", 12),
+            padding=(14, 8),
+            background="#e5e7eb",
+            foreground=TEXT,
+        )
+        style.map("Secondary.TButton", background=[("active", "#d1d5db"), ("pressed", "#cbd5e1")])
 
         # --- Scrollable container ---
-        container = ttk.Frame(self)
+        container = ttk.Frame(self, style="Bg.TFrame")
         container.pack(fill=tk.BOTH, expand=True, padx=12, pady=12)
 
-        canvas = tk.Canvas(container, highlightthickness=0)
-        self._canvas = canvas  # <-- AQUÍ
+        canvas = tk.Canvas(container, highlightthickness=0, background=BG)
+        self._canvas = canvas
         vsb = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
         canvas.configure(yscrollcommand=vsb.set)
 
         vsb.pack(side=tk.RIGHT, fill=tk.Y)
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        frm = ttk.Frame(canvas)
+        frm = ttk.Frame(canvas, style="Card.TFrame", padding=14)
         win_id = canvas.create_window((0, 0), window=frm, anchor="nw")
 
         def _on_frame_configure(_e: object) -> None:
@@ -83,7 +131,14 @@ class NewVisitWindow(tk.Toplevel):
 
         self.protocol("WM_DELETE_WINDOW", self._close)
 
-        # --- Vars ---
+        # --- Vars (asegurar que existan) ---
+        if not hasattr(self, "paciente_nombre"):
+            self.paciente_nombre = tk.StringVar(value="")
+        if not hasattr(self, "paciente_edad"):
+            self.paciente_edad = tk.StringVar(value="")
+        if not hasattr(self, "paciente_cedula"):
+            self.paciente_cedula = tk.StringVar(value="")
+
         self.fum = tk.StringVar()
         self.g_g = tk.StringVar(value="0")
         self.g_p = tk.StringVar(value="0")
@@ -92,116 +147,100 @@ class NewVisitWindow(tk.Toplevel):
         self.g_ee = tk.StringVar(value="0")
         self.g_otros = tk.StringVar(value="0")
 
-        self.anticoncepcion = tk.StringVar()  # (lo dejamos aunque ahora es Text)
+        self.anticoncepcion = tk.StringVar()
         default_pay = (
             self.cfg.clinic.payment_methods[0] if self.cfg.clinic.payment_methods else "efectivo"
         )
         self.forma_pago = tk.StringVar(value=default_pay)
 
-        # =========================
-        # GRID CONFIG
-        # =========================
-        frm.grid_columnconfigure(0, weight=0)  # label
-        frm.grid_columnconfigure(1, weight=1)  # widget
-        frm.grid_columnconfigure(2, weight=0)  # label
-        frm.grid_columnconfigure(3, weight=1)  # widget
-
-        r = 0
-        # --- Header paciente (Nombre + Edad grande + Cédula abajo) ---
-        hdr = ttk.Frame(frm)
-        hdr.grid(row=r, column=0, columnspan=4, sticky="ew", pady=(0, 10))
-        hdr.grid_columnconfigure(0, weight=1)
-
-        name_age = ttk.Frame(hdr)
-        name_age.grid(row=0, column=0, sticky="w")
-
-        ttk.Label(
-            name_age,
-            textvariable=self.paciente_nombre,
-            font=("Segoe UI", 20, "bold"),
-            foreground="#2507d2",
-        ).pack(side=tk.LEFT)
-
-        ttk.Label(
-            name_age,
-            text="  /  ",
-            font=("Segoe UI", 14),
-        ).pack(side=tk.LEFT)
-
-        ttk.Label(
-            name_age,
-            textvariable=self.paciente_edad,
-            font=("Segoe UI", 16, "bold"),
-        ).pack(side=tk.LEFT)
-
-        ttk.Label(
-            name_age,
-            text=" años",
-            font=("Segoe UI", 14, "bold"),
-        ).pack(side=tk.LEFT)
-
-        ttk.Label(
-            hdr,
-            textvariable=self.paciente_cedula,
-            font=("Segoe UI", 14),
-            foreground="#4b5563",
-        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
-
-        r += 1
-
-        # Fecha de consulta (fija)
-        ttk.Label(frm, text="Fecha de consulta:", style="Field.TLabel").grid(
-            row=r, column=0, sticky="w"
-        )
         self.consulta_var = tk.StringVar(value="")
-        ttk.Label(frm, textvariable=self.consulta_var, style="Field.TLabel").grid(
-            row=r, column=1, columnspan=3, sticky="w", padx=(6, 0)
-        )
-        r += 1
+        self.sg_var = tk.StringVar(value="—")
+        self.fpp_var = tk.StringVar(value="—")
 
+        # =========================
+        # HEADER
+        # =========================
+        hdr = ttk.Frame(frm, style="Header.TFrame")
+        hdr.pack(fill=tk.X, pady=(0, 10))
+
+        name_age = ttk.Frame(hdr, style="Header.TFrame")
+        name_age.pack(anchor="w")
+
+        ttk.Label(name_age, textvariable=self.paciente_nombre, style="H1.TLabel").pack(side=tk.LEFT)
+        ttk.Label(name_age, text="  •  ", style="Muted.TLabel").pack(side=tk.LEFT)
+        ttk.Label(name_age, textvariable=self.paciente_edad, style="H2.TLabel").pack(side=tk.LEFT)
+        ttk.Label(name_age, text=" años", style="H2.TLabel").pack(side=tk.LEFT)
+
+        ttk.Label(hdr, textvariable=self.paciente_cedula, style="Muted.TLabel").pack(
+            anchor="w", pady=(2, 0)
+        )
+
+        # =========================
+        # SECCIÓN: CONSULTA
+        # =========================
+        sec_cons = ttk.LabelFrame(frm, text="Consulta", style="Section.TLabelframe")
+        sec_cons.pack(fill=tk.X, pady=(0, 10))
+
+        row_cons = ttk.Frame(sec_cons, style="Card.TFrame")
+        row_cons.pack(fill=tk.X, padx=10, pady=10)
+
+        ttk.Label(row_cons, text="Fecha de consulta:", style="Field.TLabel").pack(side=tk.LEFT)
+        ttk.Label(row_cons, textvariable=self.consulta_var, style="H2.TLabel").pack(
+            side=tk.LEFT, padx=(10, 0)
+        )
+
+        # Por defecto (nueva cita)
         if self.cita_id is None:
             self.consulta_var.set(datetime.now().strftime("%d-%m-%Y %H:%M"))
 
-        # FUM + semanas gestacionales + FPP (misma zona)
+        # =========================
+        # SECCIÓN: OBSTETRICIA
+        # =========================
+        sec_obs = ttk.LabelFrame(frm, text="Obstetricia", style="Section.TLabelframe")
+        sec_obs.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(frm, text="FUM (dd-mm-yyyy):", style="Field.TLabel").grid(
-            row=r, column=0, sticky="w"
-        )
-        self.ent_fum = ttk.Entry(frm, textvariable=self.fum, width=18)
-        self.ent_fum.grid(row=r, column=1, sticky="w", padx=(6, 18))
+        top_obs = ttk.Frame(sec_obs, style="Card.TFrame")
+        top_obs.pack(fill=tk.X, padx=10, pady=(10, 6))
 
-        # FUM: acepta ddmmyyyy o dd-mm-yyyy (autoformato)
+        # FUM
+        fum_box = ttk.Frame(top_obs, style="Card.TFrame")
+        fum_box.pack(side=tk.LEFT, anchor="n")
+
+        ttk.Label(fum_box, text="FUM (dd-mm-aaaa):", style="Field.TLabel").pack(anchor="w")
+        self.ent_fum = ttk.Entry(fum_box, textvariable=self.fum, width=18)
+        self.ent_fum.pack(anchor="w", pady=(4, 0))
+
         vcmd = (self.register(lambda P: allow_dmy_typing(P)), "%P")
         self.ent_fum.configure(validate="key", validatecommand=vcmd)
-        # self.ent_fum.bind("<KeyRelease>", lambda _e: self._format_dmy_entry(self.ent_fum), add=True)
         self.ent_fum.bind("<FocusOut>", self._normalize_fum_on_blur, add=True)
 
-        ttk.Label(frm, text="Edad gestacional:", style="Field.TLabel").grid(
-            row=r, column=2, sticky="w"
+        # EG + FPP
+        right_obs = ttk.Frame(top_obs, style="Card.TFrame")
+        right_obs.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(24, 0))
+
+        eg_box = ttk.Frame(right_obs, style="Card.TFrame")
+        eg_box.pack(side=tk.LEFT, padx=(0, 30), anchor="n")
+
+        ttk.Label(eg_box, text="Edad gestacional:", style="Field.TLabel").pack(anchor="w")
+        ttk.Label(eg_box, textvariable=self.sg_var, style="H2.TLabel").pack(anchor="w", pady=(4, 0))
+
+        fpp_box = ttk.Frame(right_obs, style="Card.TFrame")
+        fpp_box.pack(side=tk.LEFT, anchor="n")
+
+        ttk.Label(fpp_box, text="FPP:", style="Field.TLabel").pack(anchor="w")
+        ttk.Label(fpp_box, textvariable=self.fpp_var, style="H2.TLabel").pack(
+            anchor="w", pady=(4, 0)
         )
 
-        sg_box = ttk.Frame(frm)
-        sg_box.grid(row=r, column=3, sticky="w", padx=(6, 0))
+        # Gestas
+        gestas_wrap = ttk.Frame(sec_obs, style="Card.TFrame")
+        gestas_wrap.pack(fill=tk.X, padx=10, pady=(6, 10))
 
-        self.sg_var = tk.StringVar(value="—")
-        ttk.Label(sg_box, textvariable=self.sg_var).pack(side=tk.LEFT)
+        ttk.Label(gestas_wrap, text="Gestas:", style="Field.TLabel").pack(side=tk.LEFT)
 
-        ttk.Label(sg_box, text="     FPP:", style="Field.TLabel").pack(side=tk.LEFT, padx=(12, 0))
-        self.fpp_var = tk.StringVar(value="—")
-        ttk.Label(sg_box, textvariable=self.fpp_var).pack(side=tk.LEFT)
+        gestas_box = ttk.Frame(gestas_wrap, style="Card.TFrame")
+        gestas_box.pack(side=tk.LEFT, padx=(12, 0))
 
-        r += 1
-
-        # =========================
-        # GESTAS (ordenado con lista/matriz)
-        # =========================
-        ttk.Label(frm, text="Gestas:", style="Field.TLabel").grid(
-            row=r, column=0, sticky="w", pady=(10, 0)
-        )
-        gestas_box = ttk.Frame(frm)
-        gestas_box.grid(row=r, column=1, columnspan=3, sticky="w", pady=(10, 0))
-
-        # Matriz ordenada: (label, var)
         gestas = [
             ("G", self.g_g),
             ("P", self.g_p),
@@ -210,103 +249,115 @@ class NewVisitWindow(tk.Toplevel):
             ("EE", self.g_ee),
             ("Otros", self.g_otros),
         ]
-
-        # Se dibuja en una sola fila, ordenado y compacto
         for i, (lbl, var) in enumerate(gestas):
             ttk.Label(gestas_box, text=f"{lbl}:", style="Field.TLabel").grid(
                 row=0, column=i * 2, sticky="e"
             )
-            ttk.Entry(gestas_box, textvariable=var, width=6).grid(
+            ttk.Entry(gestas_box, textvariable=var, width=5).grid(
                 row=0, column=i * 2 + 1, sticky="w", padx=(6, 14)
             )
-        r += 1
 
         # =========================
-        # Helper: textarea compacto para 2 columnas
+        # Helper: textarea 2 columnas
         # =========================
-        def add_textarea_2col(
-            row: int,
-            col_label: int,
-            label: str,
-            height: int = 4,
-        ) -> tk.Text:
-            ttk.Label(frm, text=label, style="Field.TLabel").grid(
-                row=row, column=col_label, sticky="w", pady=(10, 0)
+        def add_textarea_row(
+            parent: ttk.Frame, left_label: str, right_label: str, *, h_left: int, h_right: int
+        ) -> tuple[tk.Text, tk.Text]:
+            row = ttk.Frame(parent, style="Card.TFrame")
+            row.pack(fill=tk.X, pady=(0, 10))
+
+            colL = ttk.Frame(row, style="Card.TFrame")
+            colL.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+
+            ttk.Label(colL, text=left_label, style="Field.TLabel").pack(anchor="w")
+            boxL = ttk.Frame(colL, style="Card.TFrame")
+            boxL.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
+
+            tL = tk.Text(
+                boxL, height=h_left, wrap="word", font=("Segoe UI", 12), relief="solid", bd=1
             )
-            box = ttk.Frame(frm)
-            box.grid(
-                row=row + 1,
-                column=col_label,
-                columnspan=2,
-                sticky="nsew",
-                padx=(0, 12 if col_label == 0 else 0),
+            tL.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            sbL = ttk.Scrollbar(boxL, orient="vertical", command=tL.yview)
+            sbL.pack(side=tk.RIGHT, fill=tk.Y)
+            tL.configure(yscrollcommand=sbL.set)
+
+            colR = ttk.Frame(row, style="Card.TFrame")
+            colR.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(8, 0))
+
+            ttk.Label(colR, text=right_label, style="Field.TLabel").pack(anchor="w")
+            boxR = ttk.Frame(colR, style="Card.TFrame")
+            boxR.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
+
+            tR = tk.Text(
+                boxR, height=h_right, wrap="word", font=("Segoe UI", 12), relief="solid", bd=1
             )
+            tR.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            sbR = ttk.Scrollbar(boxR, orient="vertical", command=tR.yview)
+            sbR.pack(side=tk.RIGHT, fill=tk.Y)
+            tR.configure(yscrollcommand=sbR.set)
 
-            t = tk.Text(box, height=height, wrap="word")
-            t.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-            sb = ttk.Scrollbar(box, orient="vertical", command=t.yview)
-            sb.pack(side=tk.RIGHT, fill=tk.Y)
-            t.configure(yscrollcommand=sb.set)
-            return t
+            return tL, tR
 
         # =========================
-        # TEXTAREAS EN 2 COLUMNAS (cada fila con 2)
+        # SECCIÓN: EXPLORACIÓN / NOTAS
         # =========================
-        # Fila 1: Anticoncepción | Motivo
-        self.txt_anticoncepcion = add_textarea_2col(r, 0, "Anticoncepción:", height=2)
-        self.motivo = add_textarea_2col(r, 2, "Motivo de consulta:", height=3)
-        r += 2
+        sec_notes = ttk.LabelFrame(frm, text="Notas clínicas", style="Section.TLabelframe")
+        sec_notes.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
-        # Fila 2: Examen físico | Colposcopia
-        self.txt_examen_fisico = add_textarea_2col(r, 0, "Examen físico:", height=2)
-        self.txt_colposcopia = add_textarea_2col(r, 2, "Colposcopia:", height=2)
-        r += 2
+        body_notes = ttk.Frame(sec_notes, style="Card.TFrame")
+        body_notes.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Fila 3: Eco vaginal | Eco mamas
-        self.txt_eco_vaginal = add_textarea_2col(r, 0, "Ecografía vaginal:", height=2)
-        self.txt_eco_mamas = add_textarea_2col(r, 2, "Ecografía de mamas:", height=2)
-        r += 2
-
-        # Fila 4: Otros paraclínicos | Diagnóstico
-        self.txt_otros_para = add_textarea_2col(r, 0, "Otros paraclínicos:", height=2)
-        self.txt_diagnostico = add_textarea_2col(r, 2, "Diagnóstico:", height=2)
-        r += 2
-
-        # Fila 5: Plan (izquierda) | (vacío derecha)
-        self.txt_plan = add_textarea_2col(r, 0, "Plan:", height=3)
-        # placeholder derecha (no hace nada, solo mantiene grilla alineada)
-        ttk.Label(frm, text=" ", style="Field.TLabel").grid(row=r, column=2, sticky="w")
-        ttk.Label(frm, text=" ").grid(row=r + 1, column=2, columnspan=2, sticky="nsew")
-        r += 2
-
-        # =========================
-        # Estudios a ordenar (mantener simple)
-        # =========================
-        ttk.Label(frm, text="Estudios a ordenar:", style="Field.TLabel").grid(
-            row=r, column=0, sticky="w", pady=(14, 0)
+        self.txt_anticoncepcion, self.motivo = add_textarea_row(
+            body_notes, "Anticoncepción:", "Motivo de consulta:", h_left=2, h_right=2
         )
-        r += 1
+        self.txt_examen_fisico, self.txt_colposcopia = add_textarea_row(
+            body_notes, "Examen físico:", "Colposcopia:", h_left=2, h_right=2
+        )
+        self.txt_eco_vaginal, self.txt_eco_mamas = add_textarea_row(
+            body_notes, "Ecografía vaginal:", "Ecografía de mamas:", h_left=2, h_right=2
+        )
+        self.txt_otros_para, self.txt_diagnostico = add_textarea_row(
+            body_notes, "Otros paraclínicos:", "Diagnóstico:", h_left=2, h_right=2
+        )
+
+        # Plan (una sola columna ancha)
+        plan_row = ttk.Frame(body_notes, style="Card.TFrame")
+        plan_row.pack(fill=tk.X, pady=(0, 0))
+        ttk.Label(plan_row, text="Plan:", style="Field.TLabel").pack(anchor="w")
+        plan_box = ttk.Frame(plan_row, style="Card.TFrame")
+        plan_box.pack(fill=tk.BOTH, expand=True, pady=(4, 0))
+        self.txt_plan = tk.Text(
+            plan_box, height=2, wrap="word", font=("Segoe UI", 12), relief="solid", bd=1
+        )
+        self.txt_plan.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        sbp = ttk.Scrollbar(plan_box, orient="vertical", command=self.txt_plan.yview)
+        sbp.pack(side=tk.RIGHT, fill=tk.Y)
+        self.txt_plan.configure(yscrollcommand=sbp.set)
+
+        # =========================
+        # SECCIÓN: ESTUDIOS
+        # =========================
+        sec_est = ttk.LabelFrame(frm, text="Estudios a ordenar", style="Section.TLabelframe")
+        sec_est.pack(fill=tk.X, pady=(10, 10))
+
+        est_body = ttk.Frame(sec_est, style="Card.TFrame")
+        est_body.pack(fill=tk.X, padx=10, pady=10)
 
         self.var_pap = tk.BooleanVar(value=False)
         self.var_md = tk.BooleanVar(value=False)
         self.var_mi = tk.BooleanVar(value=False)
 
-        box_c = ttk.Frame(frm)
-        box_c.grid(row=r, column=0, columnspan=4, sticky="w")
-        self.chk_pap = ttk.Checkbutton(box_c, text="Citología PAP", variable=self.var_pap)
-        self.chk_pap.pack(side=tk.LEFT, padx=(0, 12))
-
-        self.chk_md = ttk.Checkbutton(box_c, text="Citología MD", variable=self.var_md)
-        self.chk_md.pack(side=tk.LEFT, padx=(0, 12))
-
-        self.chk_mi = ttk.Checkbutton(box_c, text="Citología MI", variable=self.var_mi)
+        self.chk_pap = ttk.Checkbutton(est_body, text="Citología PAP", variable=self.var_pap)
+        self.chk_md = ttk.Checkbutton(est_body, text="Citología MD", variable=self.var_md)
+        self.chk_mi = ttk.Checkbutton(est_body, text="Citología MI", variable=self.var_mi)
+        self.chk_pap.pack(side=tk.LEFT, padx=(0, 16))
+        self.chk_md.pack(side=tk.LEFT, padx=(0, 16))
         self.chk_mi.pack(side=tk.LEFT)
-        r += 1
 
-        ttk.Label(frm, text="Biopsia:", style="Field.TLabel").grid(
-            row=r, column=0, sticky="w", pady=(10, 0)
-        )
+        bio_row = ttk.Frame(sec_est, style="Card.TFrame")
+        bio_row.pack(fill=tk.X, padx=10, pady=(0, 10))
+
+        ttk.Label(bio_row, text="Biopsia:", style="Field.TLabel").pack(side=tk.LEFT)
         self.biopsia = tk.StringVar(value="Ninguna")
         biopsias = [
             "Ninguna",
@@ -320,40 +371,46 @@ class NewVisitWindow(tk.Toplevel):
             "Otro",
         ]
         self.cbo_biopsia = ttk.Combobox(
-            frm, textvariable=self.biopsia, values=biopsias, state="readonly", width=26
+            bio_row, textvariable=self.biopsia, values=biopsias, state="readonly", width=26
         )
-        self.cbo_biopsia.grid(row=r, column=1, sticky="w", padx=(6, 0), pady=(10, 0))
-        r += 1
+        self.cbo_biopsia.pack(side=tk.LEFT, padx=(10, 0))
 
-        # Botones
-        btns = ttk.Frame(frm)
-        btns.grid(row=r, column=0, columnspan=4, sticky="e", pady=(16, 0))
-        ttk.Button(btns, text="Guardar", command=self.save).pack(side=tk.LEFT)
-        ttk.Button(btns, text="Cancelar", command=self._close).pack(side=tk.LEFT, padx=8)
+        # =========================
+        # BOTONES
+        # =========================
+        btns = ttk.Frame(frm, style="Card.TFrame")
+        btns.pack(fill=tk.X, pady=(6, 0))
 
+        ttk.Button(btns, text="Cancelar", style="Secondary.TButton", command=self._close).pack(
+            side=tk.RIGHT, padx=(8, 0)
+        )
+        ttk.Button(btns, text="Guardar", style="Primary.TButton", command=self.save).pack(
+            side=tk.RIGHT
+        )
+
+        # =========================
+        # LOAD + TRACES (IMPORTANTE)
+        # =========================
+        # 1) Header paciente (nombre/edad/cedula)
+        self._load_patient_header()
+
+        # 2) Cargar en modo edición si aplica
         if self.cita_id is not None:
             self._load_for_edit(self.cita_id)
-            # AHORA SÍ SE PUEDE EDITAR:
-            self.ent_fum.configure(state="normal")
-            for w in (self.chk_pap, self.chk_md, self.chk_mi, self.cbo_biopsia):
-                w.configure(state="normal")
+            # si tienes fecha_consulta en DB y quieres mostrarla aquí, deja tu _load_for_edit seteando consulta_var
+            # o si no, al menos deja lo que esté actualmente en consulta_var
 
-            # si quieres preview dinámico también en edición:
-            self._fum_trace = self.fum.trace_add("write", lambda *_: self._update_sg())
-            self._update_sg()
-        else:
-            # NUEVA CITA
-            self._fum_trace = self.fum.trace_add("write", lambda *_: self._update_sg())
-            self._update_sg()
+        # 3) Preview dinámico de EG + FPP (SIEMPRE)
+        try:
+            if hasattr(self, "_fum_trace") and self._fum_trace:
+                self.fum.trace_remove("write", self._fum_trace)
+        except Exception:
+            pass
 
-        # Edad gestacional:
-        # - NUEVA CITA: preview dinámico mientras escribe (se guarda congelado al Guardar)
-        # - EDITAR CITA: NO recalcular (se carga desde BD)
-        # if self.cita_id is None:
-        #     self._fum_trace = self.fum.trace_add("write", self._update_sg)
-        #     self._update_sg()
+        self._fum_trace = self.fum.trace_add("write", lambda *_: self._update_sg())
+        self._update_sg()
 
-        self._load_patient_header()
+        # 4) Autosize
         self.after(50, self._autosize_to_content)
 
     def _autosize_to_content(self) -> None:
