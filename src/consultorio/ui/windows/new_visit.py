@@ -31,12 +31,16 @@ class NewVisitWindow(tk.Toplevel):
         self.geometry("980x820")
         self.resizable(True, True)
 
-        self._build()
         self._fum_trace: str = ""
+        self.paciente_nombre = tk.StringVar(value="")
+        self.paciente_edad = tk.StringVar(value="—")
+        self.paciente_cedula = tk.StringVar(value="Cédula: ")
+
+        self._build()
 
     def _build(self) -> None:
         style = ttk.Style()
-        style.configure("Field.TLabel", font=("Segoe UI", 9, "bold"), foreground="#0b2d5c")
+        style.configure("Field.TLabel", font=("Segoe UI", 12, "bold"), foreground="#0b2d5c")
 
         # --- Scrollable container ---
         container = ttk.Frame(self)
@@ -103,9 +107,46 @@ class NewVisitWindow(tk.Toplevel):
         frm.grid_columnconfigure(3, weight=1)  # widget
 
         r = 0
-        ttk.Label(frm, text=f"Paciente ID: {self.paciente_id}", style="Field.TLabel").grid(
-            row=r, column=0, columnspan=4, sticky="w", pady=(0, 10)
-        )
+        # --- Header paciente (Nombre + Edad grande + Cédula abajo) ---
+        hdr = ttk.Frame(frm)
+        hdr.grid(row=r, column=0, columnspan=4, sticky="ew", pady=(0, 10))
+        hdr.grid_columnconfigure(0, weight=1)
+
+        name_age = ttk.Frame(hdr)
+        name_age.grid(row=0, column=0, sticky="w")
+
+        ttk.Label(
+            name_age,
+            textvariable=self.paciente_nombre,
+            font=("Segoe UI", 20, "bold"),
+            foreground="#2507d2",
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(
+            name_age,
+            text="  /  ",
+            font=("Segoe UI", 14),
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(
+            name_age,
+            textvariable=self.paciente_edad,
+            font=("Segoe UI", 16, "bold"),
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(
+            name_age,
+            text=" años",
+            font=("Segoe UI", 14, "bold"),
+        ).pack(side=tk.LEFT)
+
+        ttk.Label(
+            hdr,
+            textvariable=self.paciente_cedula,
+            font=("Segoe UI", 14),
+            foreground="#4b5563",
+        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
+
         r += 1
 
         # Fecha de consulta (fija)
@@ -312,6 +353,7 @@ class NewVisitWindow(tk.Toplevel):
         #     self._fum_trace = self.fum.trace_add("write", self._update_sg)
         #     self._update_sg()
 
+        self._load_patient_header()
         self.after(50, self._autosize_to_content)
 
     def _autosize_to_content(self) -> None:
@@ -727,3 +769,31 @@ class NewVisitWindow(tk.Toplevel):
                 )
 
         self.conn.commit()
+
+    def _load_patient_header(self) -> None:
+        row = self.conn.execute(
+            "SELECT cedula, nombres, apellidos, fecha_nacimiento FROM pacientes WHERE paciente_id=?",
+            (self.paciente_id,),
+        ).fetchone()
+        if not row:
+            self.paciente_nombre.set(f"Paciente ID: {self.paciente_id}")
+            self.paciente_edad.set("—")
+            self.paciente_cedula.set("")
+            return
+
+        nombres = (row["nombres"] or "").strip()
+        apellidos = (row["apellidos"] or "").strip()
+        cedula = (row["cedula"] or "").strip()
+        fn = (row["fecha_nacimiento"] or "").strip()
+
+        self.paciente_nombre.set(f"{apellidos}, {nombres}".strip(", "))
+        self.paciente_cedula.set(f"Cédula: {cedula}")
+
+        born = parse_dmy_input(fn)  # soporta ddmmyyyy / dd-mm-yyyy
+        if not born:
+            self.paciente_edad.set("—")
+            return
+
+        today = date.today()
+        age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+        self.paciente_edad.set(str(max(age, 0)))

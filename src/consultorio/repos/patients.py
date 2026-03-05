@@ -44,6 +44,7 @@ class PatientUpsert:
     domicilio: str = ""
     antecedentes_personales: str = ""
     antecedentes_familiares: str = ""
+    antecedentes_ginecologicos: str = ""
 
 
 class PatientRepo:
@@ -142,8 +143,8 @@ class PatientRepo:
             """
             INSERT INTO pacientes
             (cedula, nombres, apellidos, comentario, telefono, fecha_nacimiento, domicilio,
-             antecedentes_personales, antecedentes_familiares, actualizado_en)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             antecedentes_personales, antecedentes_familiares, antecedentes_ginecologicos, actualizado_en)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 p.cedula.strip(),
@@ -155,6 +156,7 @@ class PatientRepo:
                 (p.domicilio or "").strip(),
                 (p.antecedentes_personales or "").strip(),
                 (p.antecedentes_familiares or "").strip(),
+                (p.antecedentes_ginecologicos or "").strip(),
                 _now_iso(),
             ),
         )
@@ -173,7 +175,7 @@ class PatientRepo:
             """
             UPDATE pacientes SET
               cedula=?, nombres=?, apellidos=?, comentario=?, telefono=?, fecha_nacimiento=?, domicilio=?,
-              antecedentes_personales=?, antecedentes_familiares=?, actualizado_en=?
+              antecedentes_personales=?, antecedentes_familiares=?, antecedentes_ginecologicos=?, actualizado_en=?
             WHERE paciente_id=?
             """,
             (
@@ -186,6 +188,7 @@ class PatientRepo:
                 (p.domicilio or "").strip(),
                 (p.antecedentes_personales or "").strip(),
                 (p.antecedentes_familiares or "").strip(),
+                (p.antecedentes_ginecologicos or "").strip(),
                 _now_iso(),
                 p.paciente_id,
             ),

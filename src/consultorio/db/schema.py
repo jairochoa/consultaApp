@@ -16,6 +16,7 @@ _SCHEMA: list[str] = [
         domicilio TEXT,
         antecedentes_personales TEXT,
         antecedentes_familiares TEXT,
+        antecedentes_ginecologicos TEXT,
         creado_en TEXT NOT NULL DEFAULT (datetime('now')),
         actualizado_en TEXT
     );""",
@@ -120,6 +121,9 @@ def migrate(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "estudios", "resultado_editado_en", "resultado_editado_en TEXT")
     # --- Migración ligera: nuevo campo comentario en pacientes ---
     _ensure_column(conn, "pacientes", "comentario", "comentario TEXT")
+    _ensure_column(
+        conn, "pacientes", "antecedentes_ginecologicos", "antecedentes_ginecologicos TEXT"
+    )
     # --- Migraciones incrementales: columnas nuevas en citas ---
     _ensure_column(conn, "citas", "examen_fisico", "examen_fisico TEXT")
     _ensure_column(conn, "citas", "colposcopia", "colposcopia TEXT")

@@ -102,3 +102,18 @@ def allow_dmy_typing(proposed: Optional[str]) -> bool:
     if len(s) > 10:
         return False
     return all(ch.isdigit() or ch == "-" for ch in s)
+
+
+def calc_age(born: date, today: Optional[date] = None) -> int:
+    t = today or date.today()
+    age = t.year - born.year
+    if (t.month, t.day) < (born.month, born.day):
+        age -= 1
+    return max(age, 0)
+
+
+def age_from_dmy(value: str | None) -> str:
+    born = parse_dmy_input(value)
+    if not born:
+        return "—"
+    return str(calc_age(born))

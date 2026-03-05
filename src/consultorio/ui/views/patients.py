@@ -114,9 +114,10 @@ class PatientsView(ttk.Frame):
         self.domicilio = self._row_text(detail, "Domicilio:", height=2)
         self.ant_p = self._row_text(detail, "Antecedentes personales:", height=2)
         self.ant_f = self._row_text(detail, "Antecedentes familiares:", height=2)
+        self.ant_g = self._row_text(detail, "Antecedentes ginecológicos:", height=2)
 
         # Tab en Text -> siguiente campo
-        for t in (self.domicilio, self.ant_p, self.ant_f):
+        for t in (self.domicilio, self.ant_p, self.ant_f, self.ant_g):
             t.bind("<Tab>", self._focus_next)
             t.bind("<Shift-Tab>", self._focus_prev)
 
@@ -413,7 +414,7 @@ class PatientsView(ttk.Frame):
             self.ent_fnac.delete(0, tk.END)
             self.ent_fnac._ph_show()
 
-        for t in (self.domicilio, self.ant_p, self.ant_f):
+        for t in (self.domicilio, self.ant_p, self.ant_f, self.ant_g):
             t.delete("1.0", tk.END)
 
         self.tree.selection_remove(self.tree.selection())
@@ -480,6 +481,7 @@ class PatientsView(ttk.Frame):
         set_text(self.domicilio, row["domicilio"])
         set_text(self.ant_p, row["antecedentes_personales"])
         set_text(self.ant_f, row["antecedentes_familiares"])
+        set_text(self.ant_g, row["antecedentes_ginecologicos"])
 
         self.btn_new_visit.config(state=tk.NORMAL)
         self._load_hist(paciente_id)
@@ -501,6 +503,7 @@ class PatientsView(ttk.Frame):
                 domicilio=self.domicilio.get("1.0", tk.END).strip(),
                 antecedentes_personales=self.ant_p.get("1.0", tk.END).strip(),
                 antecedentes_familiares=self.ant_f.get("1.0", tk.END).strip(),
+                antecedentes_ginecologicos=self.ant_g.get("1.0", tk.END).strip(),
             )
             if self.selected_id is not None:
                 self.repo.update(p)
