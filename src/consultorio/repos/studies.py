@@ -298,7 +298,7 @@ class StudyRepo:
                 e.resultado,
                 e.resultado_editado_en,
                 p.cedula,
-                p.apellidos || ', ' || p.nombres AS paciente,
+                p.nombres || ' ' || p.apellidos AS paciente,
                 date(c.fecha_consulta, 'localtime') AS fecha_cita
             FROM estudios e
             JOIN pacientes p ON p.paciente_id = e.paciente_id

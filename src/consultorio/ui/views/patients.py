@@ -112,9 +112,9 @@ class PatientsView(ttk.Frame):
 
         # Textareas compactas
         self.domicilio = self._row_text(detail, "Domicilio:", height=2)
-        self.ant_p = self._row_text(detail, "Antecedentes personales:", height=2)
-        self.ant_f = self._row_text(detail, "Antecedentes familiares:", height=2)
-        self.ant_g = self._row_text(detail, "Antecedentes ginecológicos:", height=2)
+        self.ant_p = self._row_text(detail, "Antecedentes personales:", height=3)
+        self.ant_f = self._row_text(detail, "Antecedentes familiares:", height=3)
+        self.ant_g = self._row_text(detail, "Antecedentes ginecológicos:", height=5)
 
         # Tab en Text -> siguiente campo
         for t in (self.domicilio, self.ant_p, self.ant_f, self.ant_g):
@@ -217,8 +217,8 @@ class PatientsView(ttk.Frame):
         self.tree_hist.pack(fill=tk.BOTH, expand=True)
 
         # Zebra del historial
-        self.tree_hist.tag_configure("even", background="#5ae758")
-        self.tree_hist.tag_configure("odd", background="#a9d7ae")
+        self.tree_hist.tag_configure("even", background="#f47cde")
+        self.tree_hist.tag_configure("odd", background="#f5c8ec")
 
         # --- NUEVO: Estudios del paciente ---
         studies = ttk.LabelFrame(

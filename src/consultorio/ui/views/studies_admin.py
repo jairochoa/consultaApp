@@ -444,7 +444,7 @@ class StudiesAdminView(ttk.Frame):
             ("#", "#", 20),
             ("fecha_cita", "Fecha de cita", 50),
             ("cedula", "Cédula", 70),
-            ("paciente", "Nombre-Apellido", 140),
+            ("paciente", "Nombre y Apellido", 140),
             ("tipo", "Estudio", 50),
             ("subtipo", "Subtipo", 80),
             # ("centro", "Centro", 160),
